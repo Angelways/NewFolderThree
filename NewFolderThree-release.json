@@ -1,0 +1,17 @@
+[
+  {
+    "Author": "John Smith",
+    "Name": "NewFolderThree",
+    "Punchline": "可以挖寶.",
+    "Description": "深層迷宮輔助外掛，提供繁體中文介面。",
+    "InternalName": "NewFolderThree",
+    "AssemblyVersion": "0.7.55.24",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "RepoUrl": "https://github.com/Angelways/NewFolderThree",
+    "IconUrl": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/icon.png",
+    "LastUpdate": 1795466830,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.24.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.24.zip"
+  }
+]
