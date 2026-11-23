@@ -9,7 +9,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace DeepDungeon.Fsd.Dalamud.Runtime.Entry;
 
-internal enum EntryOutcome { Pending, Entered, SourceVerified, Conflict, SourceConflict }
+internal enum EntryOutcome { Pending, Entered, SourceVerified, Conflict, SourceConflict, SaveSlotsFull }
 internal readonly record struct EntryResult(EntryOutcome Outcome, int Slot, int Floor, string Reason);
 
 /// <summary>One goal, observed UI content, one guarded command. No remembered UI steps.</summary>
@@ -19,6 +19,7 @@ internal sealed class DungeonEntryController : IDisposable
     private readonly int _requestedFloor, _preferredSlot;
     private readonly PreparedSaveBinding? _prepared;
     private readonly bool _verifyOnly;
+    private readonly bool _allowReplacement;
     private EntranceWindowCleanup _cleanup = new();
     private EntryDispatchGate _dispatch = new();
     private RunContext? _context;
@@ -34,15 +35,17 @@ internal sealed class DungeonEntryController : IDisposable
     public EntryResult Result { get; private set; } = new(EntryOutcome.Pending, -1, 0, "");
     public int SourceFloor => _bound is { Empty: false } source ? source.StartFloor : _requestedFloor;
     public int SourceSlot => _bound?.Index ?? -1;
+    public SaveSlotSnapshot? ReplacementCandidate { get; private set; }
 
     public DungeonEntryController(DungeonData dungeon, int floor, int preferredSlot = 0,
-        PreparedSaveBinding? prepared = null, bool verifyOnly = false)
+        PreparedSaveBinding? prepared = null, bool verifyOnly = false, bool allowReplacement = false)
     {
         _dungeon = dungeon;
         _requestedFloor = floor;
         _preferredSlot = preferredSlot;
         _prepared = prepared;
         _verifyOnly = verifyOnly;
+        _allowReplacement = allowReplacement;
     }
 
     public void Prepare(RunContext context)
@@ -152,7 +155,16 @@ internal sealed class DungeonEntryController : IDisposable
             else if (_bound == null)
             {
                 var candidates = ui.Slots.Where(slot => slot.Empty && slot.Enterable).ToArray();
-                if (candidates.Length == 0) return Fail("存檔列表沒有可用空槽，無法新建。");
+                if (candidates.Length == 0)
+                {
+                    const string full = "存檔列表沒有可用空槽，無法新建。";
+                    if (!_allowReplacement || SaveSlotReplacementPolicy.FindCandidate(ui.Slots) is not { } candidate)
+                        return Fail(full);
+                    ReplacementCandidate = candidate;
+                    SetStatus("兩個存檔槽皆已使用。");
+                    Result = new(EntryOutcome.SaveSlotsFull, -1, SourceFloor, full);
+                    return Result;
+                }
                 _bound = candidates.FirstOrDefault(slot => slot.Index == _preferredSlot, candidates[0]);
             }
             if (!ui.Slots.Any(slot => SameSource(_bound!.Value, slot) && slot.Enterable &&

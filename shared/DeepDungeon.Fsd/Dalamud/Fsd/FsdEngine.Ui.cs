@@ -318,11 +318,11 @@ namespace DeepDungeon.Fsd.Dalamud
 					ImGui.Spacing();
 					ImGui.Indent();
 					ImGui.BeginDisabled(fsdRunning || inDD || _bridgeLeaveDutyContext != null || _bridgeDeleteSaveContext != null || _bridgeDeleteSaveFlow != null);
-					if (ImGui.Button(ProgressionPauseLocked ? "繼續##fsf_start_top" : "啟動 FSD##fsf_start_top"))
+					if (ImGui.Button("啟動 FSD##fsf_start_top"))
 					{
 						try
 						{
-                            var result = ProgressionPauseLocked ? ResumeProgression() : StartSelectedFarming(new FsdStartRequest());
+                            var result = StartSelectedFarming(new FsdStartRequest());
                             _farmingError = result.Ok ? null : result.Error;
                             if (!result.Ok)
                             {
@@ -394,15 +394,11 @@ namespace DeepDungeon.Fsd.Dalamud
 						ImGui.TextColored(new Vector4(1f, 0.55f, 0.55f, 1f), startDenialNotice);
 				}
 
-                if (_checkpoint is { } checkpoint)
-                {
-                    var dungeonName = checkpoint.Plan.DungeonId switch { 1 => "死者宮殿", 2 => "天之御柱", _ => "朝聖交錯路" };
-                    ImGui.TextWrapped($"死靈術士暫停紀錄 · {dungeonName} · 存檔 {checkpoint.Slot.Index + 1} · 第 {checkpoint.Slot.StartFloor} 層");
-                }
-                else if (_ddHost?.ActiveFarming?.Session.PersistPause != null)
+                if (ProgressionPauseLocked)
                     ImGui.TextWrapped("本組通關並回到入口後暫停。");
-                if (_checkpointIssue is { } issue)
-                    ImGui.TextWrapped(issue.Message);
+                else if (_ddHost is { FsdActive: false, LastStatus: { Length: > 0 } pauseStatus } &&
+                         pauseStatus.StartsWith("已暫停", StringComparison.Ordinal))
+                    ImGui.TextWrapped(pauseStatus);
 
                 DrawFarmingOptions();
 

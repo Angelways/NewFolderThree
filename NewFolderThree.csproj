@@ -2,9 +2,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="Dalamud.Plugin.Bootstrap.targets" />
   <PropertyGroup>
-    <AssemblyName>NewFolder3</AssemblyName>
-    <RootNamespace>NewFolder3</RootNamespace>
-    <Version>0.7.55.20</Version>
+    <AssemblyName>NewFolderThree</AssemblyName>
+    <RootNamespace>NewFolderThree</RootNamespace>
+    <Version>0.7.55.24</Version>
     <Description>Standalone Deep Dungeon FSD host.</Description>
     <IsPackable>false</IsPackable>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -23,12 +23,7 @@
     <Platforms>x64</Platforms>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Public root sources. OfficialBuildProfile.g.cs is optional and ignored by git;
-         private manual builds may stage it beside these files. -->
-    <Compile Include="*.cs" />
-    <Compile Remove="OfficialBuildProfile.g.cs;*AntiResell*.cs" Condition="'$(PublicTestBuild)' == 'true'" />
-    <Compile Include="$(TestBuildProfilePath)" Link="TestBuildProfile.g.cs"
-             Condition="'$(PublicTestBuild)' == 'true' and '$(TestBuildProfilePath)' != ''" />
+    <Compile Include="Configuration.cs;FsdWindow.cs;Plugin.cs;ProductIdentity.cs;YAxisAdjustController.cs;YAxisPacketAdjustment.cs;CombatRecovery.cs;CombatRecovery.Ui.cs;CombatTimer.cs;ReconnectController.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="shared\DeepDungeon.Fsd\Core\DeepDungeon.Fsd.Core.csproj" />
@@ -47,6 +42,7 @@
     <Reference Include="Newtonsoft.Json"><HintPath>$(DalamudLibPath)\Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="NewFolder3.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="NewFolderThree.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="icon.png" TargetPath="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

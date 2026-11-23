@@ -15,17 +15,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\YAxisPacketAdjustment.cs" Link="YAxisPacketAdjustment.cs" />
-    <Compile Include="..\..\CommunityEvidenceCollector.cs" Link="CommunityEvidenceCollector.cs" />
-    <Compile Include="..\..\CommunityLongRunLogCollector.cs" Link="CommunityLongRunLogCollector.cs" />
-    <Compile Include="..\..\CommunityUsageTelemetryCollector.cs" Link="CommunityUsageTelemetryCollector.cs" />
-    <Compile Include="..\..\NewFolder3AccessGate.cs" Link="NewFolder3AccessGate.cs" />
-    <Compile Include="..\..\NewFolder3BuildProfile.cs" Link="NewFolder3BuildProfile.cs" />
+    <Compile Include="..\..\ProductIdentity.cs" Link="ProductIdentity.cs" />
     <ProjectReference Include="..\..\shared\DeepDungeon.Fsd\Core\DeepDungeon.Fsd.Core.csproj" />
     <ProjectReference Include="..\..\shared\DeepDungeon.Fsd\Dalamud\DeepDungeon.Fsd.Dalamud.csproj" />
     <Reference Include="Dalamud"><HintPath>$(DalamudLibPath)Dalamud.dll</HintPath><Private>True</Private></Reference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\NewFolder3.json" Link="NewFolder3.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\NewFolder3-release.json" Link="NewFolder3-release.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\NewFolderThree.json" Link="NewFolderThree.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

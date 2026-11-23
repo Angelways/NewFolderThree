@@ -9,7 +9,7 @@ using OmenTools.Extensions;
 using OmenTools.Info.Game.Packets.Upstream;
 using System.Numerics;
 
-namespace NewFolder3;
+namespace NewFolderThree;
 
 internal sealed unsafe class YAxisAdjustController : IDisposable
 {

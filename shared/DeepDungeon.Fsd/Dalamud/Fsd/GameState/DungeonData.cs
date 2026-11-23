@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace DeepDungeon.Fsd.Dalamud.GameState
 {
@@ -9,6 +10,7 @@ namespace DeepDungeon.Fsd.Dalamud.GameState
 		public uint AetheryteId;
 		public uint NpcBaseId;
 		public ushort TerritoryIdOutside;
+		public Vector3 EntrancePosition;
 
 		public uint DutyDungeonId;
 		public uint NpcDataId;

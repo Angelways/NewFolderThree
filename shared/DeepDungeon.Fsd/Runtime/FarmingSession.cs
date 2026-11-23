@@ -15,6 +15,7 @@ internal sealed class FarmingSession(FarmingPlan plan, int ownedSlot = -1)
     public int Failures { get; private set; }
     public int Discoveries { get; private set; }
     public Func<SaveSlotSnapshot, string?>? PersistPause { get; set; }
+    public Func<int, bool>? IsPausedSlotProtected { get; set; }
     public Func<string?>? ConfirmResume { get; private set; }
     public Action<string>? RejectResumeSource { get; private set; }
     public ulong? ResumeCharacter { get; private set; }

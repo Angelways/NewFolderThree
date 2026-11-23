@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace NewFolder3;
+namespace NewFolderThree;
 
 internal static unsafe class YAxisPacketAdjustment
 {

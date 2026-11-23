@@ -2,18 +2,23 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using DeepDungeon.Fsd.Dalamud;
 
-namespace NewFolder3;
+namespace NewFolderThree;
 
 internal sealed class FsdWindow : Window
 {
     private readonly FsdApplication _application;
     private readonly YAxisAdjustController _yAxis;
+    private readonly CombatRecovery _combatRecovery;
+    private readonly ReconnectController _reconnect;
 
-    public FsdWindow(FsdApplication application, YAxisAdjustController yAxis)
-        : base("你是壞孩子###NewFolder3")
+    public FsdWindow(FsdApplication application, YAxisAdjustController yAxis,
+        CombatRecovery combatRecovery, ReconnectController reconnect)
+        : base($"你是壞孩子###{ProductIdentity.InternalName}")
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
         _yAxis = yAxis ?? throw new ArgumentNullException(nameof(yAxis));
+        _combatRecovery = combatRecovery;
+        _reconnect = reconnect;
     }
 
     public override void Draw()
@@ -35,11 +40,30 @@ internal sealed class FsdWindow : Window
 
         if (ImGui.BeginTabItem("FSD"))
         {
+            if (_reconnect.Status is { } status)
+                ImGui.TextWrapped(status);
+            if (_reconnect.IsPending && ImGui.Button("取消重連並停止 FSD"))
+                _reconnect.Cancel();
+            bool reconnecting = _reconnect.IsPending;
+            ImGui.BeginDisabled(reconnecting);
             _application.DrawDeepDungeonFormalPanel();
             ImGui.Separator();
             ImGui.Text("通用輔助");
             _application.DrawGeneralAssistantSettings();
             _yAxis.DrawSettings();
+            ImGui.EndDisabled();
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("自動嘗試恢復戰鬥循環"))
+        {
+            _combatRecovery.Draw();
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("目前可以自動繼續的存檔"))
+        {
+            _application.DrawProgressionSaves();
             ImGui.EndTabItem();
         }
 

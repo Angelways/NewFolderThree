@@ -15,8 +15,8 @@ namespace DeepDungeon.Fsd.Dalamud
             bool infinite,
             string? detailedMapScenarioKey,
             out string error,
-            bool resumePausedProgression = false,
-            int completedLoops = 0)
+            int completedLoops = 0,
+            bool? useDetailedMap = null)
         {
             _runLogExportNotice = null;
             _runLogExportFailed = false;
@@ -28,7 +28,7 @@ namespace DeepDungeon.Fsd.Dalamud
                 return false;
             }
 
-            if (!TryAuthorizeOutsideDutyOperation(OutsideDutyOperation.StartOrEnter, out error, resumePausedProgression))
+            if (!TryAuthorizeOutsideDutyOperation(OutsideDutyOperation.StartOrEnter, out error))
                 return false;
 
             if (!TryValidateRotation(out error))
@@ -43,7 +43,7 @@ namespace DeepDungeon.Fsd.Dalamud
             }
 
             if (!_detailedMapCatalogManager.TryAcquireRunSnapshot(
-                    _configuration.UseDetailedMap,
+                    useDetailedMap ?? _configuration.UseDetailedMap,
                     detailedMapScenarioKey,
                     out DetailedMapRunSnapshot detailedMapSnapshot,
                     out error))
@@ -96,12 +96,11 @@ namespace DeepDungeon.Fsd.Dalamud
             return false;
         }
 
-        private bool TryAuthorizeOutsideDutyOperation(OutsideDutyOperation requestedOperation, out string error,
-            bool resumePausedProgression = false)
+        private bool TryAuthorizeOutsideDutyOperation(OutsideDutyOperation requestedOperation, out string error)
         {
-            if (ProgressionPauseLocked && !resumePausedProgression)
+            if (ProgressionPauseLocked)
             {
-                error = _checkpointIssue?.Message ?? "死靈術士任務已要求暫停，請由「繼續」接回任務。";
+                error = "地宮登頂任務正在等待本組出本後暫停。";
                 return false;
             }
             var decision = GetOutsideDutyOperationDecision(requestedOperation);

@@ -143,7 +143,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Entry
 					_nextTry = DateTime.Now.Add(InteractionTiming.GetRetryInterval());
 					return false;
 				}
-				if (!DeepDungeonUi.IsSaveListForDeletion(save))
+				if (EntryUiReader.IntAt(save, 11) != _dungeon.DutyDungeonId || !DeepDungeonUi.IsSaveListForDeletion(save))
 				{
 					SetStatus($"{_dungeon.Name} Del: closing a non-delete save list");
 					DeepDungeonUi.TryCloseAddon("DeepDungeonSaveData");
@@ -195,6 +195,8 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Entry
 			// 3) If Menu visible, open SaveData for deletion via Agent (robust - not affected by menu order)
 			if (hasMenu && SeenStable("menu", StabilityShort))
 			{
+				if (EntryUiReader.IntAt(menu, 3) != _dungeon.DutyDungeonId)
+					return Fail("目前入口選單與要清理的地宮不符。");
 				// Open SaveData for deletion via Agent
 				if (!_targetSlotObservedEmptyAfterDelete && !IsOnCooldown("menu-open-save") && DateTime.Now - _lastMenuFire >= InteractionTiming.GetRetryInterval())
 				{

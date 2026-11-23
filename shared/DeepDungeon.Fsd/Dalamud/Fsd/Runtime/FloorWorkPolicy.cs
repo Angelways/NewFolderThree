@@ -27,7 +27,7 @@ internal static class FloorWorkPolicyBuilder
         // progression climbs; aetherpool harvests. Discovery SEARCHES for
         // the coffer — only its opening stays off.
         var searchHoard = options.BandedEnabled && !harvest &&
-            mode != FarmingMode.DeepProgression;
+            !FarmingPlan.IsProgressionMode(mode);
         // Progression opens configured chests along the route. Missing
         // pomanders do not create room visits or mandatory chest detours.
         var openGold = !discoveryOnly && options.OpenGold;

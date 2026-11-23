@@ -53,6 +53,11 @@ internal sealed class FloorMap
     internal static FloorMap? Get(FloorMapKey key, byte floor = 0)
     {
         Failed = false;
+        if (key.Layout < 0)
+        {
+            Error = "等待副本版型載入。";
+            return null;
+        }
         if (key == cachedKey)
         {
             Error = "";

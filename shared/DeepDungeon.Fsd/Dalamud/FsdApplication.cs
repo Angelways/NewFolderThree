@@ -127,6 +127,7 @@ public sealed partial class FsdApplication : IFsdApplication
 
     public FsdSettings Settings => _settings;
     public bool IsRunActive => _module.IsRunActive;
+    public bool CanRecoverCombat => _module.CanRecoverCombat;
     public string? ActiveDetailedMapReleaseId =>
         _module.ActiveDetailedMapReleaseId;
     public DeepDungeonStateSnapshot CurrentDeepDungeonState => _module.CurrentDeepDungeonState;
@@ -170,6 +171,13 @@ public sealed partial class FsdApplication : IFsdApplication
     public void Update() => Update(Service.Framework);
 
     public void SuspendBossMovement() { ThrowIfDisposed(); _module.SuspendBossMovement(); }
+    public void SuspendForReconnect() { ThrowIfDisposed(); _module.SuspendForReconnect(); }
+    public void ResumeAfterReconnect()
+    {
+        ThrowIfDisposed();
+        _ownedEncounter?.Reset();
+        _module.ResumeAfterReconnect();
+    }
 
     public void Draw()
     {
@@ -196,6 +204,7 @@ public sealed partial class FsdApplication : IFsdApplication
         _ownedEncounter?.DrawOverlay();
     }
 
+    public void DrawProgressionSaves() { ThrowIfDisposed(); _module.DrawProgressionSaves(); }
     public void DrawDeepDungeonFormalPanel() { ThrowIfDisposed(); _module.DrawDeepDungeonFormalPanel(); }
     public void DrawGeneralAssistantSettings() { ThrowIfDisposed(); _module.DrawGeneralAssistantSettings(); }
     public void DrawCompanionSettings() { ThrowIfDisposed(); _module.DrawCompanionSettings(); }

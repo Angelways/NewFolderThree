@@ -102,7 +102,7 @@ namespace DeepDungeon.Fsd.Dalamud
             _encounters = encounterSource;
             _configuration = configuration;
             _checkpointPath = Path.Combine(pluginConfigDirectory, "FsdProgressionPause.json");
-            LoadProgressionCheckpoint();
+            _checkpointDirectory = Path.Combine(pluginConfigDirectory, "FsdProgressionSaves");
             Map.FloorMapSource.Live?.Initialize(pluginConfigDirectory);
             Map.FloorMapSource.Select(_configuration.UseBuiltInFloorMaps);
             _rotationControl = new(ReadRotationState, SetRotationEnabled, RecordRotationControl);
@@ -178,6 +178,7 @@ namespace DeepDungeon.Fsd.Dalamud
 
         private void OnTerritoryChanged(uint territoryId)
         {
+            if (_reconnecting) return;
             Map.FloorMap.Reset();
             try
             {
@@ -279,8 +280,36 @@ namespace DeepDungeon.Fsd.Dalamud
 
         internal void SuspendBossMovement() => _ddHost?.FloorController.SuspendBossMovement();
 
+        private bool _reconnecting;
+        private bool _restoringAfterReconnect;
+        internal bool CanRecoverCombat => !_reconnecting && !_restoringAfterReconnect &&
+            _currentDeepDungeonState is { IsValid: true, IsInDuty: true, IsTransitioning: false } &&
+            _ddHost?.Context is { EntryReadyForDuty: true, StatusIsError: false } &&
+            _rotationControl.DesiredEnabled;
+
+        internal void SuspendForReconnect()
+        {
+            _reconnecting = true;
+            _restoringAfterReconnect = false;
+            _ddHost?.SuspendForReconnect();
+            _rotationControl.Reset();
+            ClearPendingPassageFollowup();
+        }
+
+        internal void ResumeAfterReconnect()
+        {
+            _reconnecting = false;
+            _restoringAfterReconnect = IsRunActive;
+            OnTerritoryChanged(Service.ClientState.TerritoryType);
+        }
+
         public void Update(IFramework framework)
         {
+            if (_reconnecting)
+            {
+                if (IsRunActive) return;
+                ResumeAfterReconnect();
+            }
             _fsfScenarioIndex = GetEffectiveScenarioIndex();
             string? selectedDetailedMapScenario =
                 GetSelectedDetailedMapScenarioKey();
@@ -306,6 +335,15 @@ namespace DeepDungeon.Fsd.Dalamud
                 _dutyState?.MarkOutsideDuty();
             }
             RefreshDeepDungeonStateSnapshot();
+
+            if (_restoringAfterReconnect)
+            {
+                if (_currentInDeepDungeon && _dutyState?.StateReadIncompatible != true &&
+                    (!dutyStateOk || _dutyState is not { IsInDuty: true, IsTransitioning: false }))
+                    return;
+                _restoringAfterReconnect = false;
+                _ddHost?.RestoreAfterReconnect();
+            }
 
             if (dutyStateOk && _currentInDeepDungeon && _dutyState?.IsTransitioning == false)
                 Map.FloorMapSource.ActiveLive?.Observe();

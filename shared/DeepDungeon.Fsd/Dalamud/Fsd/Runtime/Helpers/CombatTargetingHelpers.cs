@@ -184,7 +184,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Helpers
 
         public static unsafe IBattleChara? PickExcludedAggroTarget(RunContext? context, Func<IBattleChara, bool> allowed)
         {
-            if (context?.FarmingPlan?.Mode != FarmingMode.DeepProgression)
+            if (context?.FarmingPlan?.IsProgression != true)
                 return null;
 
             var uiState = UIState.Instance();

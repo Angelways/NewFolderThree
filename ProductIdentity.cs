@@ -1,9 +1,9 @@
-namespace NewFolder3;
+namespace NewFolderThree;
 
 internal static class ProductIdentity
 {
-    public const string DisplayName = "NewFolder3";
-    public const string InternalName = "NewFolder3";
-    public const string Command = "/newfolder3";
-    public const string HostIdentity = "NewFolder3.Plugin";
+    public const string DisplayName = InternalName;
+    public const string InternalName = "NewFolderThree";
+    public const string Command = "/newfolderthree";
+    public const string HostIdentity = InternalName + ".Plugin";
 }

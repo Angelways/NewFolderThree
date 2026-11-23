@@ -183,6 +183,38 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
 
 		// ===== Update Loop =====
 
+        internal void SuspendForReconnect()
+        {
+            if (_context == null) return;
+            _floorController.SuspendForMissingDutyObservation();
+            _context.Navigator.CancelAll();
+            _context.CombatAssist.Suspend();
+            ActiveFarming?.SuspendForReconnect();
+            _context.RecordDiagnostic?.Invoke("fsd-disconnected", new { floor = _context.Duty.Floor });
+        }
+
+        internal void RestoreAfterReconnect()
+        {
+            if (_context == null || ActiveFarming is not { } farming || _dutyState.StateReadIncompatible)
+                return;
+
+            bool reenter = farming.NeedsReentryAfterReconnect(out string? error);
+            if (error != null)
+            {
+                _lastStatus = _context.StatusLine = error;
+                _lastStatusIsError = _context.StatusIsError = true;
+                StopFsd("reconnect-conflict", new { error });
+                return;
+            }
+            if (reenter)
+            {
+                _floorController.CloseRunRecording("fsd-reconnect-reentry", new { });
+                RecreateAttempt();
+            }
+            Service.Log.Info($"[RunHost] Restored after reconnect: scenario={CurrentScenarioName}, inDuty={_dutyState.IsInDuty}, floor={_dutyState.Floor}, reenter={reenter}");
+            _context.RecordDiagnostic?.Invoke("fsd-reconnect-restored", new { floor = _dutyState.Floor, reenter });
+        }
+
 		public void Update(IFramework framework)
 		{
 			if (!_isFsdMode)
@@ -320,28 +352,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
 							infinite = _multiLoopDriver.InfiniteLoop
 						});
 
-						try { _attachedScenario.Dispose(); } catch { }
-						try { _floorController.Dispose(); } catch { }
-						try { _exit.Dispose(); } catch { }
-						_inDutyControllersActive = false;
-						ReleaseDutyAttemptEvents();
-						try { _context?.Dispose(); } catch { }
-
-						DeepDungeonFloorsetTracker.Reset();
-						_context = new RunContext(
-							_encounters,
-							_configuration,
-							_dutyState,
-							_detailedMapRunSnapshot ??
-								throw new InvalidOperationException(
-									"Detailed-map run snapshot was released before loop recreation."));
-						BindDutyAttemptEvents(_context);
-						_floorController.Initialize(_context);
-						_exit.Initialize(_context);
-						_inDutyControllersActive = false;
-
-						_attachedScenario = _scenarioFactory!.Invoke();
-						_attachedScenario.Initialize(_context);
+						RecreateAttempt();
 					}
 					else
 					{
@@ -430,6 +441,27 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
         _context?.RecordDiagnostic?.Invoke("duty-observation-unavailable", new { reason });
 	}
 
+        private void RecreateAttempt()
+        {
+            try { _attachedScenario?.Dispose(); } catch { }
+            try { _floorController.Dispose(); } catch { }
+            try { _exit.Dispose(); } catch { }
+            _inDutyControllersActive = false;
+            ReleaseDutyAttemptEvents();
+            try { _context?.Dispose(); } catch { }
+
+            DeepDungeonFloorsetTracker.Reset();
+            _context = new RunContext(
+                _encounters, _configuration, _dutyState,
+                _detailedMapRunSnapshot ?? throw new InvalidOperationException(
+                    "Detailed-map run snapshot was released before attempt recreation."));
+            BindDutyAttemptEvents(_context);
+            _floorController.Initialize(_context);
+            _exit.Initialize(_context);
+            _attachedScenario = _scenarioFactory!.Invoke();
+            _attachedScenario.Initialize(_context);
+        }
+
 	private void MarkPlayerDeathFatalIfObserved()
 	{
 		if (_context == null || !_context.Duty.IsInDuty || _context.StatusIsError)
@@ -449,10 +481,10 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
             _floorController.CancelActiveMovement();
             return;
         }
-        if (_context.FarmingPlan?.Mode == FarmingMode.DeepProgression)
+        if (_context.FarmingPlan is { IsProgression: true } plan)
         {
             _context.RunOptions.Update(o => o.LeaveMode = LeaveMode.Immediate);
-            _context.StatusLine = "攻略死亡；退本後清理本任務存檔並從第一層重開。";
+            _context.StatusLine = $"攻略死亡；退本後清理本任務存檔並從第 {plan.StartFloor} 層重開。";
             _floorController.CancelActiveMovement();
             return;
         }
@@ -741,10 +773,10 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
                 _floorController.CancelActiveMovement();
                 return;
             }
-            if (context.FarmingPlan?.Mode == FarmingMode.DeepProgression)
+            if (context.FarmingPlan is { IsProgression: true } plan)
             {
                 context.RunOptions.Update(o => o.LeaveMode = LeaveMode.Immediate);
-                context.StatusLine = "攻略失敗；退本後從第一層重開。";
+                context.StatusLine = $"攻略失敗；退本後從第 {plan.StartFloor} 層重開。";
                 _floorController.CancelActiveMovement();
                 return;
             }

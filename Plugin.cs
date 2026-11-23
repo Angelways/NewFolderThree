@@ -3,26 +3,22 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using DeepDungeon.Fsd.Dalamud;
-using DeepDungeon.Fsd.Dalamud.Runtime;
 using FFXIVClientStructs.Expansion;
 using OmenTools;
 using OmenTools.OmenService;
 
-namespace NewFolder3;
+namespace NewFolderThree;
 
 public sealed class Plugin : IDalamudPlugin, IDisposable
 {
     private readonly IDalamudPluginInterface _pluginInterface;
     private readonly ICommandManager _commandManager;
     private readonly IFramework _framework;
-    private readonly Configuration _configuration;
     private readonly WindowSystem _windows = new(ProductIdentity.InternalName);
-    private readonly INewFolder3AccessGate _accessGate;
-    private readonly CommunityEvidenceCollector? _communityEvidenceCollector;
-    private readonly CommunityUsageTelemetryCollector? _usageTelemetryCollector;
-    private readonly CommunityLongRunLogCollector? _longRunLogCollector;
     private readonly FsdApplication _application;
     private readonly YAxisAdjustController _yAxis;
+    private readonly CombatRecovery _combatRecovery;
+    private readonly ReconnectController _reconnect;
     private readonly FsdWindow _window;
     private bool _disposed;
 
@@ -35,7 +31,14 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         IPluginLog pluginLog,
         IObjectTable objectTable,
         IPartyList partyList,
-        ISigScanner sigScanner)
+        ISigScanner sigScanner,
+        IClientState clientState,
+        ICondition conditions,
+        ITargetManager targets,
+        IGameInteropProvider interop,
+        IPlayerState playerState,
+        IGameGui gameGui,
+        IDataManager gameData)
     {
         _pluginInterface = pluginInterface ?? throw new ArgumentNullException(nameof(pluginInterface));
         _commandManager = commandManager ?? throw new ArgumentNullException(nameof(commandManager));
@@ -43,9 +46,8 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
 
         FsdApplication? application = null;
         YAxisAdjustController? yAxis = null;
-        CommunityEvidenceCollector? communityEvidenceCollector = null;
-        CommunityUsageTelemetryCollector? usageTelemetryCollector = null;
-        CommunityLongRunLogCollector? longRunLogCollector = null;
+        CombatRecovery? combatRecovery = null;
+        ReconnectController? reconnect = null;
         var omenInitialized = false;
         var nativeInteropInitialized = false;
         var commandRegistered = false;
@@ -68,86 +70,37 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             nativeInteropInitialized = true;
             ExpansionInterop.Initialize(sigScanner.SearchBase);
 
-            _configuration =
-                pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-            _configuration.Initialize(pluginInterface);
-            DeleteLegacyRejectedUploads(pluginInterface.GetPluginConfigDirectory(), pluginLog);
-            _accessGate = NewFolder3BuildProfile.CreateAccessGate(pluginInterface, pluginLog);
+            var savedConfiguration = pluginInterface.GetPluginConfig() as Configuration;
+            var configuration = savedConfiguration ?? new Configuration();
+            configuration.Initialize(pluginInterface);
+            Directory.CreateDirectory(pluginInterface.GetPluginConfigDirectory());
+
             string hostVersion = typeof(Plugin).Assembly.GetName().Version?.ToString()
                 ?? throw new InvalidOperationException("Standalone host version is unavailable.");
-
-            NewFolder3BuildCapabilities capabilities = NewFolder3BuildProfile.Capabilities;
-            string? installationToken = null;
-            if (capabilities.CommunityEvidenceEndpoint != null ||
-                capabilities.UsageTelemetryEndpoint != null ||
-                capabilities.LongRunLogEndpoint != null)
-            {
-                installationToken =
-                    _configuration.GetOrCreateCommunityEvidenceInstallationToken();
-            }
-
-            if (capabilities.CommunityEvidenceEndpoint is { } evidenceEndpoint)
-            {
-                communityEvidenceCollector = new CommunityEvidenceCollector(
-                    pluginInterface.GetPluginConfigDirectory(),
-                    installationToken
-                        ?? throw new InvalidOperationException(
-                            "Installation token is required for community evidence upload."),
-                    evidenceEndpoint,
-                    pluginLog);
-            }
-            if (capabilities.UsageTelemetryEndpoint is { } telemetryEndpoint)
-            {
-                usageTelemetryCollector = new CommunityUsageTelemetryCollector(
-                    pluginInterface.GetPluginConfigDirectory(),
-                    installationToken
-                        ?? throw new InvalidOperationException(
-                            "Installation token is required for usage telemetry."),
-                    hostVersion,
-                    telemetryEndpoint,
-                    pluginLog);
-            }
-            if (capabilities.LongRunLogEndpoint is { } longRunLogEndpoint)
-            {
-                longRunLogCollector = new CommunityLongRunLogCollector(
-                    pluginInterface.GetPluginConfigDirectory(),
-                    installationToken
-                        ?? throw new InvalidOperationException(
-                            "Installation token is required for long-run log upload."),
-                    hostVersion,
-                    longRunLogEndpoint,
-                    pluginLog);
-            }
-
-            _communityEvidenceCollector = communityEvidenceCollector;
-            _usageTelemetryCollector = usageTelemetryCollector;
-            _longRunLogCollector = longRunLogCollector;
-
-            IRunTelemetryObserver? runTelemetryObserver =
-                usageTelemetryCollector != null && longRunLogCollector != null
-                    ? new CompositeRunTelemetryObserver(
-                        usageTelemetryCollector,
-                        longRunLogCollector)
-                    : usageTelemetryCollector ?? (IRunTelemetryObserver?)longRunLogCollector;
+            var mapOptions = new DetailedMapHostOptions(
+                catalogBaseUri: null,
+                contributesAnonymousEvidence: false,
+                deleteCatalogsWhenDisabled: false);
 
             // FsdApplication injects the shared Dalamud services required by FSD.
-            var yAxisController = new YAxisAdjustController(_configuration, objectTable, partyList, pluginLog);
+            var yAxisController = new YAxisAdjustController(configuration, objectTable, partyList, pluginLog);
             yAxis = yAxisController;
             _yAxis = yAxisController;
             application = FsdApplication.CreateStandalone(
                 pluginInterface,
-                _configuration,
+                configuration,
                 ProductIdentity.HostIdentity,
                 hostVersion,
-                NewFolder3BuildProfile.CreateDetailedMapHostOptions(),
-                playerYOffsetProvider: () => yAxisController.ActualYOffset,
-                floorEvidenceObserver: _communityEvidenceCollector,
-                runTelemetryObserver: runTelemetryObserver,
-                tryAuthorizeFsdStart: _accessGate.TryAuthorizeFsdStart,
-                fsdStartDenialNoticeProvider: () => _accessGate.FsdStartDenialNotice);
+                mapOptions,
+                playerYOffsetProvider: () => yAxisController.ActualYOffset);
             _application = application;
 
-            _window = new FsdWindow(_application, _yAxis);
+            combatRecovery = new CombatRecovery(clientState, conditions, objectTable, targets, interop);
+            _combatRecovery = combatRecovery;
+            reconnect = new ReconnectController(_application, clientState, playerState, objectTable,
+                conditions, gameGui, gameData, pluginLog);
+            _reconnect = reconnect;
+            _window = new FsdWindow(_application, _yAxis, _combatRecovery, _reconnect);
             _windows.AddWindow(_window);
 
             _commandManager.AddHandler(ProductIdentity.Command, new CommandInfo(OnCommand)
@@ -162,6 +115,9 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             configSubscribed = true;
             _framework.Update += OnFrameworkUpdate;
             frameworkSubscribed = true;
+
+            if (savedConfiguration == null)
+                configuration.Save(configuration.Fsd);
         }
         catch (Exception startupError)
         {
@@ -171,11 +127,10 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             RollBack(() => { if (drawSubscribed) _pluginInterface.UiBuilder.Draw -= Draw; }, rollbackErrors);
             RollBack(() => { if (commandRegistered) _commandManager.RemoveHandler(ProductIdentity.Command); }, rollbackErrors);
             RollBack(_windows.RemoveAllWindows, rollbackErrors);
+            RollBack(() => reconnect?.Dispose(), rollbackErrors);
+            RollBack(() => combatRecovery?.Dispose(), rollbackErrors);
             RollBack(() => yAxis?.Dispose(), rollbackErrors);
             RollBack(() => application?.Dispose(), rollbackErrors);
-            RollBack(() => communityEvidenceCollector?.Dispose(), rollbackErrors);
-            RollBack(() => usageTelemetryCollector?.Dispose(), rollbackErrors);
-            RollBack(() => longRunLogCollector?.Dispose(), rollbackErrors);
             RollBack(() => { if (nativeInteropInitialized) ExpansionInterop.Uninitialize(); }, rollbackErrors);
             RollBack(() => { if (omenInitialized) DService.Uninit(); }, rollbackErrors);
 
@@ -184,27 +139,6 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
 
             rollbackErrors.Insert(0, startupError);
             throw new AggregateException("Standalone FSD startup and rollback both failed.", rollbackErrors);
-        }
-    }
-
-    private static void DeleteLegacyRejectedUploads(string configDirectory, IPluginLog log)
-    {
-        foreach (string spool in new[] { "DetailedMapEvidence", "UsageTelemetry", "LongRunLogs" })
-        {
-            string directory = Path.Combine(configDirectory, spool, "rejected");
-            if (!Directory.Exists(directory))
-                continue;
-            try
-            {
-                foreach (string file in Directory.EnumerateFiles(directory))
-                {
-                    try { File.Delete(file); }
-                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-                    { log.Warning(error, "Rejected upload could not be deleted: {FileName}", Path.GetFileName(file)); }
-                }
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            { log.Warning(error, "Rejected upload directory could not be cleaned: {Spool}", spool); }
         }
     }
 
@@ -228,17 +162,11 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        _application.Update(framework);
-        _yAxis.Update(_application.CurrentDeepDungeonState);
-        _communityEvidenceCollector?.ObserveRunState(
-            _application.IsRunActive,
-            _configuration.Fsd.UseDetailedMap,
-            _application.ActiveDetailedMapReleaseId);
-        _usageTelemetryCollector?.ObserveRunState(
-            _application.IsRunActive,
-            _configuration.Fsd.UseDetailedMap,
-            CommunityUsageTelemetryScenarios.MapScenarioIndex(
-                _configuration.Fsd.NecromancerFsdScenarioIndex));
+        bool connected = _reconnect.Update();
+        if (connected)
+            _application.Update(framework);
+        _yAxis.Update(connected ? _application.CurrentDeepDungeonState : default);
+        _combatRecovery.Update(_application.IsRunActive, _application.CanRecoverCombat, connected);
     }
 
     private void OnCommand(string command, string arguments)
@@ -260,11 +188,10 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         _pluginInterface.UiBuilder.Draw -= Draw;
         _commandManager.RemoveHandler(ProductIdentity.Command);
         _windows.RemoveAllWindows();
+        _reconnect.Dispose();
+        _combatRecovery.Dispose();
         _yAxis.Dispose();
         _application.Dispose();
-        _communityEvidenceCollector?.Dispose();
-        _usageTelemetryCollector?.Dispose();
-        _longRunLogCollector?.Dispose();
         ExpansionInterop.Uninitialize();
         DService.Uninit();
         _disposed = true;

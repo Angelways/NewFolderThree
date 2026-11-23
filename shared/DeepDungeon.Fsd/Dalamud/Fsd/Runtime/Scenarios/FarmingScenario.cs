@@ -13,13 +13,16 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
         : DungeonCatalog.PilgrimsTraverse;
     private RunContext? _context;
     private DungeonEntryController? _entry;
+    private DungeonEntranceTravel? _entranceTravel;
     private DungeonEntryController? _verification;
     private DungeonExitController? _exit;
     private GenericDeleteSaveFlow? _delete;
+    private GenericDeleteSaveFlow? _freeSaveSlot;
+    private long _freeSaveSlotStartedAt;
     private bool _creatingSave, _entered, _restDone, _complete, _recoverFailure, _aborted;
     private int _entryFloor;
     internal bool CanRequestPause => _entered && !_complete &&
-        session.Plan is { Mode: FarmingMode.DeepProgression, HoldAfterClear: false, StopAfterFloor: null } &&
+        session.Plan is { IsProgression: true, HoldAfterClear: false, StopAfterFloor: null } &&
         _context is { Duty.IsInDuty: true, DutyFailureObserved: false, AttemptAborted: false };
 
     public string Name => $"{DungeonShortLabel(session.Plan.DungeonId)} {session.Plan.DisplayName} ({(session.Plan.SaveUse == SaveUse.Prepared ? session.Source.Description : $"{session.NextFloor} 層")})";
@@ -28,6 +31,44 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
     public bool CountsAsCycle { get; private set; }
     public bool RecoversDutyFailure => _recoverFailure;
     public bool RequiresDutyCompletionEvent => !session.Plan.ReusesSave && !_recoverFailure && !_aborted;
+
+    internal void SuspendForReconnect()
+    {
+        _entranceTravel?.Dispose();
+        _entranceTravel = null;
+    }
+
+    // Re-entry keeps the session and verifies the previous save before acting.
+    internal bool NeedsReentryAfterReconnect(out string? error)
+    {
+        error = null;
+        if (_context is not { } ctx)
+            return false;
+        if (ctx.Duty.IsInDuty)
+        {
+            bool resultRoom = ctx.TerminalRewardsRequired && ctx.Duty.Floor == _entryFloor + 10 &&
+                ctx.Duty.CurrentFloorKind == DeepDungeonFloorKind.Result;
+            bool sameGroup = !_entered || ctx.Duty.Floor >= _entryFloor && ctx.Duty.Floor < _entryFloor + 10;
+            if (ctx.Duty.DungeonId != _dungeon.DutyDungeonId || !sameGroup && !resultRoom)
+                error = "重連後所在的副本或層組與中斷時不符，FSD 已停止。";
+            return false;
+        }
+        if (!_entered)
+        {
+            // Keep any bound slot, refreshing the surrounding UI observations.
+            _entry?.Prepare(ctx);
+            if (_freeSaveSlot != null)
+                _freeSaveSlotStartedAt = Environment.TickCount64;
+            return false;
+        }
+        if (ctx.DutyCompletionObserved || ctx.DutyFailureObserved || ctx.AttemptAborted ||
+            session.Plan.ReusesSave && ctx.HarvestComplete)
+            return false;
+        if (session.OwnedSlot >= 0 || session.Source.Pinned != null)
+            return true;
+        error = "原副本已結束，無法確認可重新進入的存檔，FSD 已停止。";
+        return false;
+    }
 
     public void Initialize(RunContext context)
     {
@@ -62,7 +103,7 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             _complete = true;
             return;
         }
-        if (!_entered && !TryEnterDuty(ctx)) return;
+        if (!_entered && !TryEnterDuty(ctx, framework)) return;
         if (ctx.Duty.StateReadFailed || ctx.Duty.IsTransitioning || DutyState.IsClientTransitioning) return;
         ObserveDutyCompletion(ctx);
         if (session.Plan.HoldAfterClear && ctx.DutyCompletionObserved &&
@@ -88,7 +129,7 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             if (ctx.DutyFailureObserved)
             {
                 if (ctx.TryHoldFailedAttempt("攻略失敗")) return;
-                if (session.Plan.Mode == FarmingMode.DeepProgression)
+                if (session.Plan.IsProgression)
                 {
                     _recoverFailure = true;
                     RequestLeave();
@@ -231,13 +272,28 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             new { floor = _entryFloor, slot = session.OwnedSlot, status });
     }
 
-    private bool TryEnterDuty(RunContext ctx)
+    private bool TryEnterDuty(RunContext ctx, IFramework framework)
     {
         if (session.ResumeCharacter is { } character && Service.PlayerState.ContentId != character)
         {
             ctx.StatusLine = "繼續期間角色已變更，請使用暫停時的角色重試。";
             ctx.StatusIsError = true;
             return false;
+        }
+
+        if (_freeSaveSlot is { } cleanup)
+        {
+            if (Environment.TickCount64 - _freeSaveSlotStartedAt >= 45_000)
+            {
+                ctx.StatusLine = "清理存檔逾時，未繼續入場。";
+                ctx.StatusIsError = true;
+                return false;
+            }
+            if (!cleanup.Update(framework) || ctx.StatusIsError)
+                return false;
+            _freeSaveSlot = null;
+            _entry = new(_dungeon, session.NextFloor, preferredSlot: 1);
+            _entry.Prepare(ctx);
         }
 
         // An entry controller owns its selected source and UI confirmation.
@@ -248,8 +304,20 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
                 !ctx.Duty.StateReadFailed && !ctx.Duty.IsTransitioning && !DutyState.IsClientTransitioning,
                 ctx.Duty.IsInDuty, ctx.Duty.DungeonId, ctx.Duty.Floor);
             var decision = FarmingEntryPolicy.Decide(facts, _dungeon.DutyDungeonId, session.NextFloor, session.OwnedSlot);
-            ctx.StatusLine = decision.Reason;
-            if (decision.Action == FarmingEntryAction.Wait) return false;
+            if (decision.Action == FarmingEntryAction.Wait)
+            {
+                _entranceTravel?.Suspend();
+                if (_entranceTravel == null) ctx.StatusLine = decision.Reason;
+                return false;
+            }
+            if (decision.Action == FarmingEntryAction.Enter && _dungeon.AetheryteId != 0)
+            {
+                _entranceTravel ??= new(_dungeon, ctx);
+                if (!_entranceTravel.Update()) return false;
+                _entranceTravel.Dispose();
+                _entranceTravel = null;
+            }
+
             ctx.RecordDiagnostic?.Invoke("farming-entry-observed", new
             {
                 action = decision.Action.ToString(), facts, expectedDungeon = _dungeon.DutyDungeonId,
@@ -257,6 +325,7 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             });
             if (decision.Action == FarmingEntryAction.Conflict)
             {
+                ctx.StatusLine = decision.Reason;
                 ctx.StatusIsError = true;
                 return false;
             }
@@ -282,11 +351,31 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             else
             {
                 _creatingSave = true;
-                _entry = new(_dungeon, session.NextFloor, preferredSlot: 0);
+                _entry = new(_dungeon, session.NextFloor, preferredSlot: 0,
+                    allowReplacement: ctx.Configuration.Farming.AutoDeleteSaveWhenFull);
             }
             _entry.Prepare(ctx);
         }
         var entry = _entry.Update();
+        if (entry.Outcome == EntryOutcome.SaveSlotsFull && _entry.ReplacementCandidate is { } candidate)
+        {
+            if (session.IsPausedSlotProtected?.Invoke(candidate.Index) == true)
+            {
+                ctx.StatusLine = "第 2 槽是可繼續的暫停存檔，無法自動清理。";
+                ctx.StatusIsError = true;
+                return false;
+            }
+            _entry.Dispose();
+            _entry = null;
+            _freeSaveSlotStartedAt = Environment.TickCount64;
+            _freeSaveSlot = new(_dungeon, candidate.Index, slots =>
+                session.IsPausedSlotProtected?.Invoke(candidate.Index) != true &&
+                SaveSlotReplacementPolicy.IsStillEligible(slots, candidate)
+                    ? null
+                    : "存檔列表已變更，已停止自動清理。");
+            _freeSaveSlot.Prepare(ctx);
+            return false;
+        }
         if (entry.Outcome == EntryOutcome.SourceConflict)
             session.RejectResumeSource?.Invoke(entry.Reason);
         if (entry.Outcome != EntryOutcome.Entered) return false;
@@ -355,6 +444,7 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
     private void RequestLeave() => _context?.RunOptions.Update(o => o.LeaveMode = LeaveMode.Immediate);
     public void Dispose()
     {
+        _entranceTravel?.Dispose();
         _entry?.Dispose();
         _verification?.Dispose();
         _exit?.Dispose();

@@ -9,7 +9,7 @@ public readonly record struct FarmingSessionDecision(bool CountCycle, int NextFl
 public static class FarmingSessionPolicy
 {
     public static bool ReachedStopBoundary(FarmingPlan plan, in FarmingAttemptResult result) =>
-        plan.Mode == FarmingMode.DeepProgression && plan.StopAfterFloor is { } limit &&
+        plan.IsProgression && plan.StopAfterFloor is { } limit &&
         result.DutyCompleted && !result.DutyFailed && !result.Aborted && result.EntryFloor + 9 >= limit;
 
     public static FarmingSessionDecision Decide(FarmingPlan plan, in FarmingAttemptResult result)
@@ -20,7 +20,7 @@ public static class FarmingSessionPolicy
         if (result.Aborted)
             return new(false, plan.StartFloor, ownsSave, false, "本次入本已中止，未計完成次數。");
         if (result.DutyFailed)
-            return plan.Mode == FarmingMode.DeepProgression
+            return plan.IsProgression
                 ? new(false, plan.StartFloor, true, true, string.Empty)
                 : new(false, plan.StartFloor, ownsSave, false, "本次攻略失敗，未計完成次數。");
         if (plan.ReusesSave)
@@ -28,10 +28,10 @@ public static class FarmingSessionPolicy
                 result.HarvestCompleted ? string.Empty : "採集未正常收尾，未計完成次數。");
         if (!result.DutyCompleted)
             return new(false, result.EntryFloor, false, false, "未觀測到通關或敗北；保留存檔，停止接續。");
-        if (plan.Mode == FarmingMode.DeepProgression)
+        if (plan.IsProgression)
         {
-            int terminalEntry = plan.DungeonId == 1 ? 191 : 91;
-            if (result.EntryFloor < 1 || result.EntryFloor > terminalEntry || result.EntryFloor % 10 != 1)
+            int terminalEntry = plan.TerminalEntryFloor;
+            if (result.EntryFloor < plan.StartFloor || result.EntryFloor > terminalEntry || result.EntryFloor % 10 != 1)
                 return new(false, result.EntryFloor, false, false, "攻略起點無效，停止接續。");
             return result.EntryFloor >= terminalEntry
                 ? new(true, plan.StartFloor, true, false, string.Empty)

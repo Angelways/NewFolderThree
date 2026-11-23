@@ -1,9 +1,8 @@
 using Dalamud.Configuration;
 using Dalamud.Plugin;
 using DeepDungeon.Fsd.Runtime;
-using System.Security.Cryptography;
 
-namespace NewFolder3;
+namespace NewFolderThree;
 
 [Serializable]
 public sealed class Configuration : IPluginConfiguration, IFsdSettingsStore
@@ -16,7 +15,6 @@ public sealed class Configuration : IPluginConfiguration, IFsdSettingsStore
     public float MovementYSubtract { get; set; }
     public bool AutoYAxisAdjustment { get; set; }
     public bool MovementYDisableInParty { get; set; }
-    public string CommunityEvidenceInstallationToken { get; set; } = string.Empty;
 
     public void Initialize(IDalamudPluginInterface pluginInterface)
         => _pluginInterface = pluginInterface ?? throw new ArgumentNullException(nameof(pluginInterface));
@@ -35,29 +33,5 @@ public sealed class Configuration : IPluginConfiguration, IFsdSettingsStore
             throw new InvalidOperationException("Standalone FSD settings store received an unknown settings instance.");
         (_pluginInterface ?? throw new InvalidOperationException("Standalone configuration is not initialized."))
             .SavePluginConfig(this);
-    }
-
-    public string GetOrCreateCommunityEvidenceInstallationToken()
-    {
-        if (IsLowerHex(CommunityEvidenceInstallationToken, 32))
-            return CommunityEvidenceInstallationToken;
-
-        CommunityEvidenceInstallationToken =
-            Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-        (_pluginInterface ?? throw new InvalidOperationException("Standalone configuration is not initialized."))
-            .SavePluginConfig(this);
-        return CommunityEvidenceInstallationToken;
-    }
-
-    private static bool IsLowerHex(string value, int expectedLength)
-    {
-        if (value.Length != expectedLength)
-            return false;
-        foreach (char character in value)
-        {
-            if (character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))
-                return false;
-        }
-        return true;
     }
 }

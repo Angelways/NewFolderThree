@@ -6,6 +6,29 @@ public sealed class FarmingSettings
 {
     public uint DungeonId { get; set; } = 4;
     public FarmingMode Mode { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? PalaceNormalSummit { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? HeavenOnHighNormalSummit { get; set; }
+
+    public FarmingMode GetMode(uint dungeonId) => dungeonId switch
+    {
+        1 => PalaceNormalSummit == true ? FarmingMode.NormalSummit : FarmingMode.DeepProgression,
+        2 => HeavenOnHighNormalSummit == true ? FarmingMode.NormalSummit : FarmingMode.DeepProgression,
+        _ => Mode
+    };
+
+    public void SetMode(uint dungeonId, FarmingMode mode)
+    {
+        switch (dungeonId)
+        {
+            case 1: PalaceNormalSummit = mode == FarmingMode.NormalSummit ? true : null; break;
+            case 2: HeavenOnHighNormalSummit = mode == FarmingMode.NormalSummit ? true : null; break;
+            default: Mode = mode; break;
+        }
+    }
+
+    public bool AutoDeleteSaveWhenFull { get; set; }
     public Dictionary<string, FarmingPreferences> Preferences { get; set; } = new();
 
     public FarmingPreferences GetPreferences(FsdSettings legacy, FarmingMode? modeOverride = null)
@@ -16,6 +39,7 @@ public sealed class FarmingSettings
             FarmingMode.Hoard => "Hoard:Create",
             FarmingMode.Aetherpool => "Aetherpool:Prepared",
             FarmingMode.HoardDiscovery => "HoardDiscovery:Prepared",
+            FarmingMode.NormalSummit => "NormalSummit:Create",
             _ => "DeepProgression:Create"
         };
         if (!Preferences.TryGetValue(key, out var value))
