@@ -10,7 +10,13 @@ namespace DeepDungeon.Fsd.Dalamud;
 internal partial class FsdEngine
 {
     private string? _farmingError;
-    private const string SaveConfirmationTitle = "確認啟動 FSD###fsd_save_confirmation";
+    private const string SaveConfirmationTitle = "確認啟動 FSD";
+    private const string SaveConfirmationPopup = SaveConfirmationTitle + "###fsd_save_confirmation";
+    private const string ResumableSaveNotice =
+        "當前地宮存在可以自動繼續的存檔，\n請移步「目前可以自動繼續的存檔」標籤頁查看。";
+    private const string NewSaveWarning =
+        "如果您確定要開啟新的存檔，請長按下方的確認按鈕，\n此操作可能導致你的存檔消失。";
+    private const string ConfirmNewSaveLabel = "確認（長按 5 秒）";
     private const long SaveConfirmationHoldMs = 5000;
     private (ulong Character, FsdFarmingRequest Request)? _pendingFarmingStart;
     private long? _saveConfirmationHoldStartedAt;
@@ -247,54 +253,87 @@ internal partial class FsdEngine
 
         _pendingFarmingStart = (character, request);
         _saveConfirmationHoldStartedAt = null;
-        ImGui.OpenPopup(SaveConfirmationTitle);
+        ImGui.OpenPopup(SaveConfirmationPopup);
     }
 
     private void DrawFarmingSaveConfirmation(bool startDisabled)
     {
-        if (!ImGui.BeginPopupModal(SaveConfirmationTitle, ImGuiWindowFlags.AlwaysAutoResize))
+        if (!ImGui.IsPopupOpen(SaveConfirmationPopup))
         {
             _pendingFarmingStart = null;
             _saveConfirmationHoldStartedAt = null;
             return;
         }
 
+        float font = ImGui.GetFontSize();
+        var padding = new Vector2(font * 1.3f, font);
+        var viewport = ImGui.GetMainViewport();
+        float width = Math.Clamp(viewport.WorkSize.X - 4 * padding.X, 14 * font, 35 * font);
+        var center = viewport.WorkPos + viewport.WorkSize * 0.5f;
+        ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f));
+        float windowWidth = width + 2 * padding.X;
+        ImGui.SetNextWindowSizeConstraints(new Vector2(windowWidth, 0), new Vector2(windowWidth, float.MaxValue));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, padding);
+        ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, font * 0.7f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, font * 0.7f);
+        ImGui.PushStyleVar(ImGuiStyleVar.PopupBorderSize, 1f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, font * 0.4f);
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, 0xff382821);
+        ImGui.PushStyleColor(ImGuiCol.Border, 0xff82624b);
+
+        bool visible = ImGui.BeginPopupModal(SaveConfirmationPopup,
+            ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove);
         try
         {
+            if (!visible)
+            {
+                _saveConfirmationHoldStartedAt = null;
+                return;
+            }
             if (_pendingFarmingStart is not { } pending || pending.Character != Service.PlayerState.ContentId)
             {
                 CloseFarmingSaveConfirmation();
                 return;
             }
 
-            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetFontSize() * 27);
-            ImGui.TextWrapped("當前地宮存在可以自動繼續的存檔，請移步自動繼續標籤頁查看。如果您確定要開啟新的存檔，請長按下方的確認按鈕，此操作可能導致你的存檔消失。");
+            DrawSaveConfirmationNotice(width, font);
+            ImGui.Spacing();
+            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + width);
+            ImGui.TextUnformatted(NewSaveWarning);
             ImGui.PopTextWrapPos();
             ImGui.Spacing();
-            if (ImGui.Button("取消"))
+
+            const string cancelLabel = "取消";
+            float cancelWidth = ImGui.CalcTextSize(cancelLabel).X + 2.4f * font;
+            float confirmWidth = ImGui.CalcTextSize(ConfirmNewSaveLabel).X + 2.4f * font;
+            float gap = font * 0.65f;
+            float height = ImGui.GetFrameHeight() + font * 0.8f;
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0, width - cancelWidth - gap - confirmWidth));
+            ImGui.PushStyleColor(ImGuiCol.Button, 0xff47352c);
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0xff5b493b);
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0xff45392e);
+            bool cancelled = ImGui.Button(cancelLabel, new Vector2(cancelWidth, height));
+            ImGui.PopStyleColor(3);
+            if (cancelled)
             {
                 CloseFarmingSaveConfirmation();
                 return;
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, gap);
             ImGui.BeginDisabled(startDisabled);
-            ImGui.Button("確認（長按 5 秒）", new Vector2(0f, ImGui.GetFrameHeight() + 4f));
+            ImGui.PushStyleColor(ImGuiCol.Button, 0xff865831);
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0xffa37144);
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0xff9b6635);
+            ImGui.Button(ConfirmNewSaveLabel, new Vector2(confirmWidth, height));
             bool holding = !startDisabled && ImGui.IsItemActive() && ImGui.IsItemHovered() &&
                 ImGui.IsMouseDown(ImGuiMouseButton.Left);
-            ImGui.EndDisabled();
-
             float progress = UpdateSaveConfirmationHold(holding, ImGui.IsMouseClicked(ImGuiMouseButton.Left),
                 ImGui.GetFrameCount(), Environment.TickCount64);
-            if (progress <= 0f)
-                return;
-            Vector2 min = ImGui.GetItemRectMin();
-            Vector2 max = ImGui.GetItemRectMax();
-            const float inset = 2f;
-            float progressWidth = (max.X - min.X - 2 * inset) * progress;
-            if (progressWidth > 0f)
-                ImGui.GetWindowDrawList().AddRectFilled(new Vector2(min.X + inset, max.Y - 5f),
-                    new Vector2(min.X + inset + progressWidth, max.Y - inset), 0xff9ee769);
+            DrawSaveConfirmationProgress(progress, font);
+            ImGui.PopStyleColor(3);
+            ImGui.EndDisabled();
+
             if (progress < 1f)
                 return;
 
@@ -303,7 +342,54 @@ internal partial class FsdEngine
         }
         finally
         {
-            ImGui.EndPopup();
+            if (visible) ImGui.EndPopup();
+            ImGui.PopStyleColor(2);
+            ImGui.PopStyleVar(5);
+        }
+    }
+
+    private static void DrawSaveConfirmationNotice(float width, float font)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        Vector2 header = ImGui.GetCursorScreenPos();
+        float iconSize = 2 * font;
+        float iconFont = font * 1.17f;
+        draw.AddRectFilled(header, header + new Vector2(iconSize), ImGui.GetColorU32(0xff734e30), font * 0.45f);
+        Vector2 iconTextSize = ImGui.CalcTextSize("i") * (iconFont / font);
+        draw.AddText(ImGui.GetFont(), iconFont, header + (new Vector2(iconSize) - iconTextSize) * 0.5f,
+            ImGui.GetColorU32(0xfffed6bb), "i");
+        draw.AddText(ImGui.GetFont(), font * 1.22f, header + new Vector2(iconSize + font * 0.7f, font * 0.39f),
+            ImGui.GetColorU32(ImGuiCol.Text), SaveConfirmationTitle);
+        ImGui.Dummy(new Vector2(width, iconSize));
+        ImGui.Spacing();
+
+        float inset = font * 0.75f;
+        float wrapWidth = width - 2 * inset;
+        Vector2 card = ImGui.GetCursorScreenPos();
+        float cardHeight = ImGui.CalcTextSize(ResumableSaveNotice, false, wrapWidth).Y + 2 * inset;
+        draw.AddRectFilled(card, card + new Vector2(width, cardHeight), ImGui.GetColorU32(0xff4e3728), font * 0.45f);
+        ImGui.SetCursorScreenPos(card + new Vector2(inset));
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + wrapWidth);
+        ImGui.TextUnformatted(ResumableSaveNotice);
+        ImGui.PopTextWrapPos();
+        ImGui.SetCursorScreenPos(new Vector2(card.X, card.Y + cardHeight));
+        ImGui.Dummy(Vector2.Zero);
+    }
+
+    private static void DrawSaveConfirmationProgress(float progress, float font)
+    {
+        Vector2 min = ImGui.GetItemRectMin();
+        Vector2 max = ImGui.GetItemRectMax();
+        float inset = font * 0.22f;
+        float height = font * 0.24f;
+        var left = new Vector2(min.X + inset, max.Y - inset - height);
+        var right = new Vector2(max.X - inset, max.Y - inset);
+        var draw = ImGui.GetWindowDrawList();
+        draw.AddRectFilled(left, right, ImGui.GetColorU32(0xff4b3322), height * 0.5f);
+        if (progress > 0)
+        {
+            right.X = left.X + (right.X - left.X) * progress;
+            draw.AddRectFilled(left, right, ImGui.GetColorU32(0xffffc791), height * 0.5f);
         }
     }
 

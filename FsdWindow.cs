@@ -106,9 +106,11 @@ internal sealed class FsdWindow : Window
         ImGui.TextWrapped("本移速調整適用於死者宮殿及天之御柱，整十層除外。");
         ImGui.Separator();
         ImGui.TextWrapped("同時，本插件會在特定的層數阻止某些危險技能的釋放。");
-        ImGui.Separator();
-        ImGui.TextWrapped(_potdSpeed.Status);
-
+        if (_potdSpeed.Status is { Length: > 0 } status)
+        {
+            ImGui.Separator();
+            ImGui.TextWrapped(status);
+        }
     }
 
 }

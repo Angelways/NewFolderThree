@@ -181,7 +181,7 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
     {
         string dungeonName = CurrentDungeonName();
         if (dungeonName.Length == 0)
-            return "僅限死者宮殿與天之御柱";
+            return string.Empty;
         if (_currentFloor < 1 || _currentFloor > PotdMovementSpeedPolicy.MaximumFloor(_currentDungeonId))
             return $"等待讀取{dungeonName}層數";
         return $"{dungeonName} {_currentFloor} 層不啟用移速調整";
