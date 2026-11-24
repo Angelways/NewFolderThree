@@ -23,7 +23,7 @@
     <Platforms>x64</Platforms>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Configuration.cs;FsdWindow.cs;Plugin.cs;ProductIdentity.cs;YAxisAdjustController.cs;YAxisPacketAdjustment.cs;CombatRecovery.cs;CombatRecovery.Ui.cs;CombatTimer.cs;ReconnectController.cs" />
+    <Compile Include="Configuration.cs;DeepDungeonSpeedController.cs;FsdWindow.cs;Plugin.cs;PotdMachinistActionBlocker.cs;ProductIdentity.cs;YAxisAdjustController.cs;YAxisPacketAdjustment.cs;CombatRecovery.cs;CombatRecovery.Ui.cs;CombatTimer.cs;ReconnectController.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="shared\DeepDungeon.Fsd\Core\DeepDungeon.Fsd.Core.csproj" />

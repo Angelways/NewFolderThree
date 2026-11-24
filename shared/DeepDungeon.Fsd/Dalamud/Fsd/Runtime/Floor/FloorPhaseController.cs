@@ -27,6 +27,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Floor
 		private readonly IFloorEvidenceObserver? _floorEvidenceObserver;
 		private readonly IRunTelemetryObserver? _runTelemetryObserver;
         private readonly Func<IBossMovementStrategy>? _spinBossMovementFactory;
+        private readonly Func<float>? _movementSpeedProvider;
 		private readonly NativeDeepDungeonLogMessageSource _logMessageSource;
 		private NavigationHelper? _navHelper;
 		private ChatWatchers? _chatWatchers;
@@ -95,12 +96,14 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Floor
 			NativeDeepDungeonLogMessageSource logMessageSource,
 			IFloorEvidenceObserver? floorEvidenceObserver = null,
 			IRunTelemetryObserver? runTelemetryObserver = null,
-            Func<IBossMovementStrategy>? spinBossMovementFactory = null)
+            Func<IBossMovementStrategy>? spinBossMovementFactory = null,
+            Func<float>? movementSpeedProvider = null)
 		{
 			_logMessageSource = logMessageSource ?? throw new ArgumentNullException(nameof(logMessageSource));
 			_floorEvidenceObserver = floorEvidenceObserver;
 			_runTelemetryObserver = runTelemetryObserver;
             _spinBossMovementFactory = spinBossMovementFactory;
+            _movementSpeedProvider = movementSpeedProvider;
 		}
 
         private (uint Dungeon, byte Floor) _intuitionScope;
@@ -532,7 +535,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Floor
                 () => _status, value => _status = value, () => _nativeIntuitionActive,
                 CancelActiveMovement, RecordReplayEvent,
                 (checkpoint, force) => RecordNativeIntuitionState(checkpoint, force),
-                SnapshotRunOptions, RecordNativeIntuitionState);
+                SnapshotRunOptions, RecordNativeIntuitionState, _movementSpeedProvider);
             _floorRuntime.AttachBoss(new FloorBossController(dd->Floor, _ctx!, _navHelper!,
                 _pomanderManager, _floorRuntime.Items,
                 (operation, objective) => _floorRuntime.RequireMovementPermission(operation, objective),

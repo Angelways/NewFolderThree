@@ -484,8 +484,11 @@ internal static class RoomSitePlanner
     internal static double ExpectedSearchSeconds(
         Vector3 start, IReadOnlyList<ObjectiveSite> order,
         Func<Vector3, Vector3, float> distance,
-        IReadOnlyDictionary<string, double> probabilities)
+        IReadOnlyDictionary<string, double> probabilities,
+        float movementSpeed = MoveSpeedMps)
     {
+        if (!float.IsFinite(movementSpeed) || movementSpeed <= 0)
+            movementSpeed = MoveSpeedMps;
         double survival = 1d;
         double seconds = 0d;
         var previous = start;
@@ -494,7 +497,7 @@ internal static class RoomSitePlanner
             double service = site.Kind == ObjectiveSiteKind.Candidate
                 ? ProbeSeconds : Math.Max(0f, site.TaskCost);
             seconds += Math.Max(0d, survival) *
-                (distance(previous, site.Position) / MoveSpeedMps + service);
+                (distance(previous, site.Position) / movementSpeed + service);
             double p = probabilities.TryGetValue(site.Key, out var value) ? value :
                 site.Kind is ObjectiveSiteKind.Hoard or ObjectiveSiteKind.HoardIndicator ||
                 site.Kind == ObjectiveSiteKind.ConfirmedChest &&

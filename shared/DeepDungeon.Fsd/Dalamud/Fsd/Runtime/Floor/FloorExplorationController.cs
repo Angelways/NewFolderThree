@@ -43,6 +43,7 @@ internal sealed partial class FloorExplorationController : IDisposable
     private readonly NativeStateRecorder RecordNativeIntuitionState;
     private readonly NativeStateSnapshotRecorder RecordNativeIntuitionSnapshot;
     private readonly Func<RunOptions> SnapshotRunOptions;
+    private readonly Func<float>? _movementSpeedProvider;
     private FloorPhase _phase { get => _getPhase(); set => _setPhase(value); }
     private string _status { get => _getStatus(); set => _setStatus(value); }
     private bool _nativeIntuitionActive => _getNativeIntuition();
@@ -74,7 +75,8 @@ internal sealed partial class FloorExplorationController : IDisposable
         Func<string> getStatus, Action<string> setStatus, Func<bool> getNativeIntuition,
         Action cancelMovement, Action<string, object> record,
         NativeStateRecorder recordNative, Func<RunOptions> snapshotRunOptions,
-        NativeStateSnapshotRecorder recordNativeSnapshot)
+        NativeStateSnapshotRecorder recordNativeSnapshot,
+        Func<float>? movementSpeedProvider = null)
     {
         Generation = generation;
         DungeonId = dungeonId;
@@ -100,6 +102,7 @@ internal sealed partial class FloorExplorationController : IDisposable
         RecordReplayEvent = record; RecordNativeIntuitionState = recordNative;
         SnapshotRunOptions = snapshotRunOptions;
         RecordNativeIntuitionSnapshot = recordNativeSnapshot;
+        _movementSpeedProvider = movementSpeedProvider;
     }
 
     public long Generation { get; }
@@ -191,7 +194,11 @@ bool primaryOwnsOperation = true)
     {
         _scopeDd = dd;
         _coordPipeline ??= new CoordPipeline(RecordReplayEvent);
-        _navigation ??= new Coord.NavigationSurface(() => _navBitmap, RecordReplayEvent, ReadNavigationSnapshot)
+        _navigation ??= new Coord.NavigationSurface(
+            () => _navBitmap,
+            RecordReplayEvent,
+            ReadNavigationSnapshot,
+            movementSpeed: _movementSpeedProvider)
         { AttackSuspended = () => _coordRecoveryController?.Suspend() };
         // Rebuild floor terrain and coverage once per floor. All movement
         // uses the same navigator, irrespective of the selected task.
@@ -221,6 +228,7 @@ bool primaryOwnsOperation = true)
             Coord.NavDiag.Map = _navBitmap;
             _navFailureReported.Clear();   // dedup is per floor+target
             _siteDriver ??= new Coord.ObjectiveSiteDriver();
+            _siteDriver.MovementSpeedProvider = _movementSpeedProvider;
             // Quota-position preview is a read-only last-target
             // observation — the driver must never ACQUIRE a target just
             // to describe the work.

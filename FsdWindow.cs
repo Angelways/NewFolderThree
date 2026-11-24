@@ -10,15 +10,20 @@ internal sealed class FsdWindow : Window
     private readonly YAxisAdjustController _yAxis;
     private readonly CombatRecovery _combatRecovery;
     private readonly ReconnectController _reconnect;
+    private readonly Configuration _configuration;
+    private readonly DeepDungeonSpeedController _potdSpeed;
 
     public FsdWindow(FsdApplication application, YAxisAdjustController yAxis,
-        CombatRecovery combatRecovery, ReconnectController reconnect)
+        CombatRecovery combatRecovery, ReconnectController reconnect,
+        Configuration configuration, DeepDungeonSpeedController potdSpeed)
         : base($"你是壞孩子###{ProductIdentity.InternalName}")
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
         _yAxis = yAxis ?? throw new ArgumentNullException(nameof(yAxis));
         _combatRecovery = combatRecovery;
         _reconnect = reconnect;
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _potdSpeed = potdSpeed ?? throw new ArgumentNullException(nameof(potdSpeed));
     }
 
     public override void Draw()
@@ -55,6 +60,12 @@ internal sealed class FsdWindow : Window
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("死者宫殿移速"))
+        {
+            DrawPotdSpeedSettings();
+            ImGui.EndTabItem();
+        }
+
         if (ImGui.BeginTabItem("自動嘗試恢復戰鬥循環"))
         {
             _combatRecovery.Draw();
@@ -68,6 +79,34 @@ internal sealed class FsdWindow : Window
         }
 
         ImGui.EndTabBar();
+    }
+
+    private void DrawPotdSpeedSettings()
+    {
+        bool enabled = _configuration.PotdSpeedEnabled;
+        bool changed = ImGui.Checkbox("启用移速调整", ref enabled);
+
+        float addition = _configuration.PotdSpeedAddition;
+        changed |= ImGui.SliderFloat("移速增加", ref addition, 0f, 5f, "%.2f");
+
+        bool maxAcceleration = _configuration.PotdMaxAcceleration;
+        changed |= ImGui.Checkbox("最大加速度", ref maxAcceleration);
+
+        if (changed)
+        {
+            _configuration.PotdSpeedEnabled = enabled;
+            _configuration.PotdSpeedAddition = float.IsFinite(addition)
+                ? Math.Clamp(addition, 0f, 5f)
+                : 0f;
+            _configuration.PotdMaxAcceleration = maxAcceleration;
+            _configuration.SavePluginConfig();
+        }
+
+        ImGui.Separator();
+        ImGui.TextWrapped("2890 拦截条件：机工士在死者宫殿 141–149、151–159……191–199 层释放该技能时拦截。包含调整后的技能 ID，以及普通和地面目标施放。");
+        ImGui.Separator();
+        ImGui.TextWrapped(_potdSpeed.Status);
+        ImGui.TextDisabled("仅死者宫殿 1–200 层的非整十层生效；Boss 层、200 层和其他深宫均禁用。");
     }
 
 }

@@ -75,6 +75,16 @@ internal sealed class ObjectiveSiteDriver : IDisposable
     // Shared floor-pooled profile — built once per pinned catalog+floor;
     // the structural rank mapping is cached here, never per frame.
     private RoomSitePlanner.FloorProbeProfile? _floorProfile;
+    internal Func<float>? MovementSpeedProvider { get; set; }
+
+    private float CurrentMovementSpeed
+    {
+        get
+        {
+            var speed = MovementSpeedProvider?.Invoke() ?? RoomSitePlanner.MoveSpeedMps;
+            return float.IsFinite(speed) && speed > 0 ? speed : RoomSitePlanner.MoveSpeedMps;
+        }
+    }
     private DetailedMapCatalog? _profileCatalog;
     private int _profileFloor = -1;
     /// <summary>Pipeline→scheduler channel: true while the bound op has a
@@ -764,7 +774,8 @@ internal sealed class ObjectiveSiteDriver : IDisposable
                     trial.AddRange(order);
                     trial.Insert(i, s);
                     var sc = RoomSitePlanner.ExpectedSearchSeconds(
-                        anchor, trial, (a, b) => dist.Meters(a, b), optionalProb);
+                        anchor, trial, (a, b) => dist.Meters(a, b), optionalProb,
+                        CurrentMovementSpeed);
                     if (sc < bestScore) { bestScore = sc; bestPos = i; }
                 }
                 order.Insert(bestPos, s);
@@ -848,7 +859,8 @@ internal sealed class ObjectiveSiteDriver : IDisposable
         {
             flat = FlattenVisit(ExpandVisit(order));
             score = RoomSitePlanner.ExpectedSearchSeconds(
-                playerPos, flat, (a, b) => dist.Meters(a, b), optionalProb);
+                playerPos, flat, (a, b) => dist.Meters(a, b), optionalProb,
+                CurrentMovementSpeed);
             meters = RouteMeters(flat, RouteTerminal(order));
             signature = string.Join('>', flat.Select(s => s.Key));
         }

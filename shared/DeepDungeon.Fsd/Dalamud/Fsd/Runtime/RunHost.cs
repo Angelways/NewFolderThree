@@ -52,14 +52,15 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
 			NativeDeepDungeonLogMessageSource logMessageSource,
 			IFloorEvidenceObserver? floorEvidenceObserver = null,
 			IRunTelemetryObserver? runTelemetryObserver = null,
-            Func<IBossMovementStrategy>? spinBossMovementFactory = null)
+            Func<IBossMovementStrategy>? spinBossMovementFactory = null,
+            Func<float>? movementSpeedProvider = null)
 		{
 			_configuration = configuration;
             _encounters = encounterSource ?? throw new ArgumentNullException(nameof(encounterSource));
 			_dutyState = dutyState;
 			ArgumentNullException.ThrowIfNull(logMessageSource);
 			_floorController = new FloorPhaseController(logMessageSource, floorEvidenceObserver, runTelemetryObserver,
-                spinBossMovementFactory);
+                spinBossMovementFactory, movementSpeedProvider);
 		_exit = new ExitPolicyController();
 	}
 

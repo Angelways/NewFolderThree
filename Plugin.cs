@@ -17,6 +17,8 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
     private readonly WindowSystem _windows = new(ProductIdentity.InternalName);
     private readonly FsdApplication _application;
     private readonly YAxisAdjustController _yAxis;
+    private readonly DeepDungeonSpeedController _potdSpeed;
+    private readonly PotdMachinistActionBlocker _potdActionBlocker;
     private readonly CombatRecovery _combatRecovery;
     private readonly ReconnectController _reconnect;
     private readonly FsdWindow _window;
@@ -46,6 +48,8 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
 
         FsdApplication? application = null;
         YAxisAdjustController? yAxis = null;
+        DeepDungeonSpeedController? potdSpeed = null;
+        PotdMachinistActionBlocker? potdActionBlocker = null;
         CombatRecovery? combatRecovery = null;
         ReconnectController? reconnect = null;
         var omenInitialized = false;
@@ -86,13 +90,28 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             var yAxisController = new YAxisAdjustController(configuration, objectTable, partyList, pluginLog);
             yAxis = yAxisController;
             _yAxis = yAxisController;
+            potdSpeed = new DeepDungeonSpeedController(
+                framework,
+                conditions,
+                objectTable,
+                interop,
+                sigScanner,
+                pluginLog,
+                () => configuration.PotdSpeedEnabled,
+                () => configuration.PotdSpeedAddition,
+                () => configuration.PotdMaxAcceleration);
+            _potdSpeed = potdSpeed;
+            potdActionBlocker = new PotdMachinistActionBlocker(
+                framework, conditions, objectTable, interop, pluginLog);
+            _potdActionBlocker = potdActionBlocker;
             application = FsdApplication.CreateStandalone(
                 pluginInterface,
                 configuration,
                 ProductIdentity.HostIdentity,
                 hostVersion,
                 mapOptions,
-                playerYOffsetProvider: () => yAxisController.ActualYOffset);
+                playerYOffsetProvider: () => yAxisController.ActualYOffset,
+                movementSpeedProvider: _potdSpeed.GetNavigationMovementSpeed);
             _application = application;
 
             combatRecovery = new CombatRecovery(clientState, conditions, objectTable, targets, interop);
@@ -100,7 +119,8 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             reconnect = new ReconnectController(_application, clientState, playerState, objectTable,
                 conditions, gameGui, gameData, pluginLog);
             _reconnect = reconnect;
-            _window = new FsdWindow(_application, _yAxis, _combatRecovery, _reconnect);
+            _window = new FsdWindow(_application, _yAxis, _combatRecovery, _reconnect,
+                configuration, _potdSpeed);
             _windows.AddWindow(_window);
 
             _commandManager.AddHandler(ProductIdentity.Command, new CommandInfo(OnCommand)
@@ -129,8 +149,10 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             RollBack(_windows.RemoveAllWindows, rollbackErrors);
             RollBack(() => reconnect?.Dispose(), rollbackErrors);
             RollBack(() => combatRecovery?.Dispose(), rollbackErrors);
-            RollBack(() => yAxis?.Dispose(), rollbackErrors);
             RollBack(() => application?.Dispose(), rollbackErrors);
+            RollBack(() => potdActionBlocker?.Dispose(), rollbackErrors);
+            RollBack(() => potdSpeed?.Dispose(), rollbackErrors);
+            RollBack(() => yAxis?.Dispose(), rollbackErrors);
             RollBack(() => { if (nativeInteropInitialized) ExpansionInterop.Uninitialize(); }, rollbackErrors);
             RollBack(() => { if (omenInitialized) DService.Uninit(); }, rollbackErrors);
 
@@ -190,8 +212,10 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         _windows.RemoveAllWindows();
         _reconnect.Dispose();
         _combatRecovery.Dispose();
-        _yAxis.Dispose();
         _application.Dispose();
+        _potdActionBlocker.Dispose();
+        _potdSpeed.Dispose();
+        _yAxis.Dispose();
         ExpansionInterop.Uninitialize();
         DService.Uninit();
         _disposed = true;

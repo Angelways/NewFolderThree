@@ -30,6 +30,7 @@ namespace DeepDungeon.Fsd.Dalamud
         private readonly MasterPlayer.MechanicRuntime.IEncounterSource _encounters;
         private readonly Func<IBossMovementStrategy>? _spinBossMovementFactory;
         private readonly Action<DeepDungeonStateSnapshot>? _stateObserver;
+        private readonly Func<float>? _movementSpeedProvider;
         private readonly NativeDeepDungeonLogMessageSource _logMessageSource;
 
         private readonly FsdRotationController _rotationControl;
@@ -97,7 +98,8 @@ namespace DeepDungeon.Fsd.Dalamud
             FsdStartAuthorizationCallback? tryAuthorizeFsdStart = null,
             Func<string?>? fsdStartDenialNoticeProvider = null,
             Func<IBossMovementStrategy>? spinBossMovementFactory = null,
-            Action<DeepDungeonStateSnapshot>? stateObserver = null)
+            Action<DeepDungeonStateSnapshot>? stateObserver = null,
+            Func<float>? movementSpeedProvider = null)
         {
             _encounters = encounterSource;
             _configuration = configuration;
@@ -119,6 +121,7 @@ namespace DeepDungeon.Fsd.Dalamud
             _fsdStartDenialNoticeProvider = fsdStartDenialNoticeProvider;
             _spinBossMovementFactory = spinBossMovementFactory;
             _stateObserver = stateObserver;
+            _movementSpeedProvider = movementSpeedProvider;
             _logMessageSource = new NativeDeepDungeonLogMessageSource(Service.GameInteropProvider);
         }
 
@@ -237,7 +240,8 @@ namespace DeepDungeon.Fsd.Dalamud
 						_logMessageSource,
 						_floorEvidenceObserver,
 						_runTelemetryObserver,
-                        _spinBossMovementFactory);
+                        _spinBossMovementFactory,
+                        _movementSpeedProvider);
 					Service.Log.Info("[FsdEngine] Run host created.");
 				}
 

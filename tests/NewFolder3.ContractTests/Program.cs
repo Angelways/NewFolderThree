@@ -17,6 +17,8 @@ internal static class Program
         passed += Run("local-manifest-identity", TestLocalManifestIdentity);
         passed += Run("full-save-replacement", TestFullSaveReplacement);
         passed += Run("normal-summit-progression", TestNormalSummitProgression);
+        passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
+        passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
         Console.WriteLine($"NewFolderThree contract tests: {passed} passed");
         return 0;
     }
@@ -86,6 +88,53 @@ internal static class Program
             Assert(retry is { CountCycle: false, DeleteOwnedSave: true, RecoverFailure: true } && retry.NextFloor == first,
                 "A retry must return to the configured summit start.");
         }
+    }
+
+    private static void TestPotdSpeedFloorGate()
+    {
+        for (int floor = 1; floor <= PotdMovementSpeedPolicy.MaximumFloor; floor++)
+        {
+            bool expected = floor % 10 != 0;
+            Assert(PotdMovementSpeedPolicy.IsEligibleFloor(
+                    PotdMovementSpeedPolicy.PalaceOfTheDeadDungeonId, floor) == expected,
+                $"Unexpected PotD speed eligibility for floor {floor}.");
+        }
+
+        Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(0, 1),
+            "Unknown dungeons must not enable PotD speed adjustment.");
+        Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(2, 11),
+            "Other Deep Dungeons must not enable PotD speed adjustment.");
+        Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(1, 0) &&
+               !PotdMovementSpeedPolicy.IsEligibleFloor(1, 201),
+            "Floors outside the PotD 1-200 range must not enable speed adjustment.");
+
+        Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(1, 11, 6f, 0.5f, true) == 6.5f,
+            "Navigation speed must include the active PotD speed addition.");
+        Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(1, 10, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.ApplySpeedAddition(2, 11, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.ApplySpeedAddition(1, 11, 6f, 0.5f, false) == 6f,
+            "Navigation speed must remain unchanged outside an active PotD mob floor.");
+    }
+
+    private static void TestPotdMachinistActionBlock()
+    {
+        bool policy(uint jobId, uint dungeonId, int floor, uint requestedId,
+            uint adjustedId) =>
+            PotdMachinistActionPolicy.ShouldBlock(
+                jobId, dungeonId, floor, requestedId, adjustedId);
+        Assert(policy(31, 1, 141, 2890, 2890) &&
+               policy(31, 1, 199, 2890, 2890),
+            "Machinist action 2890 must be blocked on eligible late PotD floors.");
+        Assert(!policy(31, 1, 140, 2890, 2890) &&
+               !policy(31, 1, 150, 2890, 2890) &&
+               !policy(31, 1, 200, 2890, 2890) &&
+               !policy(31, 1, 201, 2890, 2890),
+            "The action block must exclude floor 140, every tenth floor, and floors above 200.");
+        Assert(!policy(24, 1, 141, 2890, 2890) &&
+               !policy(31, 2, 141, 2890, 2890) &&
+               !policy(31, 1, 141, 2891, 2891) &&
+               policy(31, 1, 141, 2866, 2890),
+            "The block must match the machinist, PotD, and requested or adjusted action ID only.");
     }
 
     private static void TestDetailedMapHostOptionsNoService()

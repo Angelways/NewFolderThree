@@ -36,7 +36,8 @@ public sealed partial class FsdApplication : IFsdApplication
         IRunTelemetryObserver? runTelemetryObserver = null,
         FsdStartAuthorizationCallback? tryAuthorizeFsdStart = null,
         Func<string?>? fsdStartDenialNoticeProvider = null,
-        Action<DeepDungeonStateSnapshot>? stateObserver = null)
+        Action<DeepDungeonStateSnapshot>? stateObserver = null,
+        Func<float>? movementSpeedProvider = null)
     {
         ArgumentNullException.ThrowIfNull(encounterSource);
         _encounters = encounterSource;
@@ -80,7 +81,8 @@ public sealed partial class FsdApplication : IFsdApplication
                 tryAuthorizeFsdStart,
                 fsdStartDenialNoticeProvider,
                 () => new SpinBossMovementStrategy(_spin),
-                stateObserver);
+                stateObserver,
+                movementSpeedProvider);
             _module = module;
             _module.Initialize();
             Service.Log.Info($"[FSD] Host {hostIdentity}/{hostVersion}; engine {FsdEngineIdentity.InformationalVersion}.");
@@ -111,14 +113,15 @@ public sealed partial class FsdApplication : IFsdApplication
         IRunTelemetryObserver? runTelemetryObserver = null,
         FsdStartAuthorizationCallback? tryAuthorizeFsdStart = null,
         Func<string?>? fsdStartDenialNoticeProvider = null,
-        Action<DeepDungeonStateSnapshot>? stateObserver = null)
+        Action<DeepDungeonStateSnapshot>? stateObserver = null,
+        Func<float>? movementSpeedProvider = null)
     {
         var host = new EncounterMechanicHost(pluginInterface);
         try
         {
             var app = new FsdApplication(pluginInterface, settingsStore, hostIdentity, hostVersion,
                 detailedMapHostOptions, host, playerYOffsetProvider, floorEvidenceObserver, runTelemetryObserver,
-                tryAuthorizeFsdStart, fsdStartDenialNoticeProvider, stateObserver);
+                tryAuthorizeFsdStart, fsdStartDenialNoticeProvider, stateObserver, movementSpeedProvider);
             app._ownedEncounter = host;
             return app;
         }

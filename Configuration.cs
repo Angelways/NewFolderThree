@@ -15,6 +15,9 @@ public sealed class Configuration : IPluginConfiguration, IFsdSettingsStore
     public float MovementYSubtract { get; set; }
     public bool AutoYAxisAdjustment { get; set; }
     public bool MovementYDisableInParty { get; set; }
+    public bool PotdSpeedEnabled { get; set; }
+    public float PotdSpeedAddition { get; set; } = 0.5f;
+    public bool PotdMaxAcceleration { get; set; }
 
     public void Initialize(IDalamudPluginInterface pluginInterface)
         => _pluginInterface = pluginInterface ?? throw new ArgumentNullException(nameof(pluginInterface));
@@ -34,4 +37,8 @@ public sealed class Configuration : IPluginConfiguration, IFsdSettingsStore
         (_pluginInterface ?? throw new InvalidOperationException("Standalone configuration is not initialized."))
             .SavePluginConfig(this);
     }
+
+    public void SavePluginConfig()
+        => (_pluginInterface ?? throw new InvalidOperationException("Standalone configuration is not initialized."))
+            .SavePluginConfig(this);
 }
