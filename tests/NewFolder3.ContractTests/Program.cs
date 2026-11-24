@@ -92,7 +92,7 @@ internal static class Program
 
     private static void TestPotdSpeedFloorGate()
     {
-        for (int floor = 1; floor <= PotdMovementSpeedPolicy.MaximumFloor; floor++)
+        for (int floor = 1; floor <= PotdMovementSpeedPolicy.PalaceOfTheDeadMaximumFloor; floor++)
         {
             bool expected = floor % 10 != 0;
             Assert(PotdMovementSpeedPolicy.IsEligibleFloor(
@@ -100,20 +100,32 @@ internal static class Program
                 $"Unexpected PotD speed eligibility for floor {floor}.");
         }
 
+        for (int floor = 1; floor <= PotdMovementSpeedPolicy.HeavenOnHighMaximumFloor; floor++)
+        {
+            bool expected = floor % 10 != 0;
+            Assert(PotdMovementSpeedPolicy.IsEligibleFloor(
+                    PotdMovementSpeedPolicy.HeavenOnHighDungeonId, floor) == expected,
+                $"Unexpected Heaven-on-High speed eligibility for floor {floor}.");
+        }
+
         Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(0, 1),
             "Unknown dungeons must not enable PotD speed adjustment.");
-        Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(2, 11),
-            "Other Deep Dungeons must not enable PotD speed adjustment.");
         Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(1, 0) &&
                !PotdMovementSpeedPolicy.IsEligibleFloor(1, 201),
             "Floors outside the PotD 1-200 range must not enable speed adjustment.");
+        Assert(!PotdMovementSpeedPolicy.IsEligibleFloor(2, 0) &&
+               !PotdMovementSpeedPolicy.IsEligibleFloor(2, 101),
+            "Floors outside the Heaven-on-High 1-100 range must not enable speed adjustment.");
 
         Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(1, 11, 6f, 0.5f, true) == 6.5f,
             "Navigation speed must include the active PotD speed addition.");
+        Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(2, 91, 6f, 0.5f, true) == 6.5f,
+            "Navigation speed must include the active Heaven-on-High speed addition.");
         Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(1, 10, 6f, 0.5f, true) == 6f &&
-               PotdMovementSpeedPolicy.ApplySpeedAddition(2, 11, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.ApplySpeedAddition(2, 100, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.ApplySpeedAddition(3, 11, 6f, 0.5f, true) == 6f &&
                PotdMovementSpeedPolicy.ApplySpeedAddition(1, 11, 6f, 0.5f, false) == 6f,
-            "Navigation speed must remain unchanged outside an active PotD mob floor.");
+            "Navigation speed must remain unchanged outside active non-boss floors in supported dungeons.");
     }
 
     private static void TestPotdMachinistActionBlock()
@@ -135,6 +147,14 @@ internal static class Program
                !policy(31, 1, 141, 2891, 2891) &&
                policy(31, 1, 141, 2866, 2890),
             "The block must match the machinist, PotD, and requested or adjusted action ID only.");
+        Assert(policy(31, 2, 91, 2890, 2890) &&
+               policy(31, 2, 99, 2890, 2890) &&
+               policy(31, 2, 93, 2866, 2890),
+            "Machinist action 2890 must also be blocked on Heaven-on-High floors 91-99.");
+        Assert(!policy(31, 2, 90, 2890, 2890) &&
+               !policy(31, 2, 100, 2890, 2890) &&
+               !policy(24, 2, 91, 2890, 2890),
+            "The Heaven-on-High block must exclude boundary floors and other jobs.");
     }
 
     private static void TestDetailedMapHostOptionsNoService()

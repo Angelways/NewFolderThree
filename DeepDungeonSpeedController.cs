@@ -155,7 +155,7 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
         else if (_speedBlockedByStatus)
             _status = "当前受限制状态影响";
         else
-            _status = $"死者宫殿 {_currentFloor} 层移速 Hook 已启用";
+            _status = $"{CurrentDungeonName()} {_currentFloor} 层移速 Hook 已启用";
     }
 
     private unsafe void ReadCurrentFloor(out uint dungeonId, out int floor)
@@ -178,12 +178,20 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
 
     private string DescribeInactiveFloor()
     {
-        if (_currentDungeonId != PotdMovementSpeedPolicy.PalaceOfTheDeadDungeonId)
-            return "仅限死者宫殿";
-        if (_currentFloor is < 1 or > PotdMovementSpeedPolicy.MaximumFloor)
-            return "等待读取死者宫殿层数";
-        return $"死者宫殿 {_currentFloor} 层不启用移速修改";
+        string dungeonName = CurrentDungeonName();
+        if (dungeonName.Length == 0)
+            return "仅限死者宫殿和天之宫殿";
+        if (_currentFloor < 1 || _currentFloor > PotdMovementSpeedPolicy.MaximumFloor(_currentDungeonId))
+            return $"等待读取{dungeonName}层数";
+        return $"{dungeonName} {_currentFloor} 层不启用移速修改";
     }
+
+    private string CurrentDungeonName() => _currentDungeonId switch
+    {
+        PotdMovementSpeedPolicy.PalaceOfTheDeadDungeonId => "死者宫殿",
+        PotdMovementSpeedPolicy.HeavenOnHighDungeonId => "天之宫殿",
+        _ => string.Empty
+    };
 
     private void TryConfigureHooks()
     {
@@ -209,7 +217,7 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
         {
             DisposeHooks();
             _status = "速度签名不可用，移速 Hook 未启用";
-            _log.Warning(ex, "NewFloder 死者宫殿移速签名未匹配，移速调整已禁用。");
+            _log.Warning(ex, "NewFloder 深宫移速签名未匹配，移速调整已禁用。");
         }
     }
 

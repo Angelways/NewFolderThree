@@ -60,7 +60,7 @@ internal sealed class FsdWindow : Window
             ImGui.EndTabItem();
         }
 
-        if (ImGui.BeginTabItem("死者宫殿移速"))
+        if (ImGui.BeginTabItem("深宫移速"))
         {
             DrawPotdSpeedSettings();
             ImGui.EndTabItem();
@@ -103,10 +103,11 @@ internal sealed class FsdWindow : Window
         }
 
         ImGui.Separator();
-        ImGui.TextWrapped("2890 拦截条件：机工士在死者宫殿 141–149、151–159……191–199 层释放该技能时拦截。包含调整后的技能 ID，以及普通和地面目标施放。");
+        ImGui.TextWrapped("移速：死者宫殿 1–200 层、天之宫殿 1–100 层的非整十层生效，并同步用于导航速度估算。");
+        ImGui.TextWrapped("2890 拦截：机工士在死者宫殿 141–149、151–159……191–199 层，以及天之宫殿 91–99 层释放时拦截。包含调整后的技能 ID，以及普通和地面目标施放。");
         ImGui.Separator();
         ImGui.TextWrapped(_potdSpeed.Status);
-        ImGui.TextDisabled("仅死者宫殿 1–200 层的非整十层生效；Boss 层、200 层和其他深宫均禁用。");
+        ImGui.TextDisabled("其他深宫不应用移速调整；所有整十层均排除。");
     }
 
 }
