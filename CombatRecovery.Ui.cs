@@ -25,7 +25,7 @@ internal sealed partial class CombatRecovery
             var remaining = timer.RemainingMilliseconds(Environment.TickCount64);
             ImGui.TextUnformatted(remaining > 0
                 ? $"距自動嘗試  {Math.Ceiling(remaining / 1000d):0} 秒"
-                : "已達到 30 秒閾值");
+                : "已達到 10 秒閾值");
         }
 
         ImGui.TextWrapped(castStatus);

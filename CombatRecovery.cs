@@ -232,13 +232,6 @@ internal sealed partial class CombatRecovery : IDisposable
             return;
         }
 
-        var spatialStatus = ActionManager.GetActionInRangeOrLoS(actionId, (GameObject*)player.Address, targetObject);
-        if (spatialStatus != 0)
-        {
-            castStatus = $"{origin}目標距離過遠或視線受阻（{spatialStatus}）";
-            return;
-        }
-
         var status = manager->GetActionStatus(GameActionType.Action, actionId, target.GameObjectId);
         if (status != 0)
         {

@@ -53,8 +53,17 @@ internal sealed class FarmingSession(FarmingPlan plan, int ownedSlot = -1)
     public PreparedSaveBinding PrepareSource()
     {
         Source.ConfigureForEntry(Plan.ReusesSave, Plan.SaveUse == SaveUse.Prepared ? null : NextFloor,
-            OwnedSlot >= 0 ? OwnedSlot : null, Plan.MaxFloor);
+            OwnedSlot >= 0 ? OwnedSlot : null, Plan.MaxFloor,
+            resolveByExpectedFloor: Plan.ContinuesExistingProgress);
         return Source;
+    }
+
+    public bool BindContinuationSave()
+    {
+        if (Source.Pinned is not { Index: 0 or 1 } source || OwnedSlot >= 0 && OwnedSlot != source.Index)
+            return false;
+        OwnedSlot = source.Index;
+        return true;
     }
 
     public bool BindCreatedSave(int slot)
@@ -85,17 +94,20 @@ internal sealed class PreparedSaveBinding
     public int? RequiredSlot { get; private set; }
     public int MaxFloor { get; private set; }
     public bool RequireCheckpointMatch { get; private set; }
+    private bool ResolveByExpectedFloor { get; set; }
     public string Description => Pinned is { } value ? $"存檔 {value.Index + 1}，起點 {value.StartFloor} 層" : "唯一存檔待讀取";
 
     public PreparedSaveBinding(bool reusable = false, int? expectedFloor = null, int? requiredSlot = null, int maxFloor = 100) =>
         ConfigureForEntry(reusable, expectedFloor, requiredSlot, maxFloor);
 
-    public void ConfigureForEntry(bool reusable, int? expectedFloor, int? requiredSlot, int maxFloor = 100)
+    public void ConfigureForEntry(bool reusable, int? expectedFloor, int? requiredSlot, int maxFloor = 100,
+        bool resolveByExpectedFloor = false)
     {
         Reusable = reusable;
         ExpectedFloor = expectedFloor;
         RequiredSlot = requiredSlot;
         MaxFloor = maxFloor;
+        ResolveByExpectedFloor = resolveByExpectedFloor;
     }
 
     public void PinCheckpoint(SaveSlotSnapshot slot)
@@ -108,8 +120,15 @@ internal sealed class PreparedSaveBinding
 
     public bool Observe(IReadOnlyList<SaveSlotSnapshot> slots, out SaveSlotSnapshot source, out string error)
     {
+        int? requiredSlot = RequiredSlot;
+        if (ResolveByExpectedFloor && requiredSlot == null && ExpectedFloor is { } nextFloor)
+        {
+            if (!CurrentDutyContinuationPolicy.TryResolveSave(slots, nextFloor, MaxFloor, out source, out error))
+                return false;
+            requiredSlot = source.Index;
+        }
         if (!PreparedSavePolicy.TryResolve(slots, Reusable ? Pinned : null, Reusable,
-                ExpectedFloor, out source, out error, RequiredSlot, MaxFloor)) return false;
+                ExpectedFloor, out source, out error, requiredSlot, MaxFloor)) return false;
         if (RequireCheckpointMatch && source != Pinned)
         {
             error = "存檔內容與暫停時的紀錄不符，無法繼續。";

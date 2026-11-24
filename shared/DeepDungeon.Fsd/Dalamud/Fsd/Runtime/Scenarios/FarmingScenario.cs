@@ -6,8 +6,10 @@ using DeepDungeon.Fsd.Dalamud.Runtime.Entry;
 namespace DeepDungeon.Fsd.Dalamud.Runtime.Scenarios;
 
 /// <summary>One entry/exit attempt. Session owns continuation, prepared source and climb progress.</summary>
-internal sealed class FarmingScenario(FarmingSession session) : IScenario
+internal sealed class FarmingScenario(FarmingSession session,
+    CurrentDutyContinuation? currentDutyContinuation = null) : IScenario
 {
+    private readonly CurrentDutyContinuation? _currentDutyContinuation = currentDutyContinuation;
     private readonly DungeonData _dungeon = DungeonCatalog.TryGetByDungeonId(session.Plan.DungeonId, out var d)
         ? d
         : DungeonCatalog.PilgrimsTraverse;
@@ -98,9 +100,30 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             LeaveMode = LeaveMode.AfterFinishDungeon,
             RequireValidatedAbandonPrompt = true
         });
-        // Entry/attachment is selected from fresh observations in Update.
-        // Until then no floor controller may act on this attempt.
-        context.EntryReadyForDuty = false;
+        if (_currentDutyContinuation is { } continuation)
+        {
+            // The player is already inside the duty. Attach to the observed
+            // ten-floor block and never open the entry UI or re-enter it.
+            _entryFloor = continuation.BlockStartFloor;
+            _entered = true;
+            context.EntryReadyForDuty = true;
+            context.TerminalRewardsRequired =
+                _entryFloor == 91 && ResultAltarPolicy.TryGet(_dungeon.DungeonId, 100, out _) ||
+                _entryFloor == 191 && Potd200RewardPolicy.IsTerminal(_dungeon.DungeonId, 200);
+            context.PreparedSaveDescription = $"現場接續，{continuation.CurrentFloor} 層（{continuation.BlockStartFloor}-{continuation.BlockEndFloor}）";
+            context.StatusLine = continuation.IsResultFloor
+                ? $"現場接續：第 {continuation.CurrentFloor} 層（終局獎勵流程）。"
+                : continuation.IsTenFloorBoundary
+                ? $"現場接續：第 {continuation.CurrentFloor} 層（十層首領區塊）。"
+                : $"現場接續：第 {continuation.CurrentFloor} 層（{continuation.BlockStartFloor}-{continuation.BlockEndFloor} 層區塊）。";
+            Service.Log.Info($"[Farming] Attached to current duty: dungeon={continuation.DungeonId}, floor={continuation.CurrentFloor}, block={continuation.BlockStartFloor}-{continuation.BlockEndFloor}, boundary={continuation.IsTenFloorBoundary}");
+        }
+        else
+        {
+            // Entry/attachment is selected from fresh observations in Update.
+            // Until then no floor controller may act on this attempt.
+            context.EntryReadyForDuty = false;
+        }
     }
 
     public void Update(IFramework framework)
@@ -189,6 +212,16 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             return;
         }
         var decision = FarmingSessionPolicy.Decide(session.Plan, result);
+        bool retainedUnidentifiedTerminalSave = _currentDutyContinuation is not null &&
+            session.OwnedSlot < 0 && decision.DeleteOwnedSave && result.DutyCompleted &&
+            !result.DutyFailed && !result.Aborted;
+        if (retainedUnidentifiedTerminalSave)
+            decision = decision with { DeleteOwnedSave = false };
+        else if (_currentDutyContinuation is not null && session.OwnedSlot < 0 && decision.RecoverFailure)
+        {
+            decision = new(false, session.NextFloor, false, false,
+                "接續區塊未正常通關；沒有可安全驗證的原存檔槽位，FSD 已停止並保留現場。");
+        }
         if (session.PersistPause is { } persistPause)
         {
             if (!result.DutyCompleted || result.DutyFailed || result.Aborted || decision.Error.Length > 0)
@@ -211,22 +244,25 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
         }
         if (decision.DeleteOwnedSave)
         {
-            if (session.OwnedSlot < 0)
+            if (session.OwnedSlot < 0 && _currentDutyContinuation is null)
             {
                 ctx.StatusLine = "無法識別本任務建立的存檔；停止清理。";
                 ctx.StatusIsError = true;
                 _complete = true;
                 return;
             }
-            if (_delete == null)
+            if (session.OwnedSlot >= 0 && _delete == null)
             {
                 _delete = new GenericDeleteSaveFlow(_dungeon,
                     session.OwnedSlot, slots => ValidateOwnedSave(slots));
                 _delete.Prepare(ctx);
             }
-            if (!_delete.Update(framework)) return;
-            if (ctx.StatusIsError) { _complete = true; return; }
-            session.ConfirmOwnedSaveDeleted();
+            if (_delete != null)
+            {
+                if (!_delete.Update(framework)) return;
+                if (ctx.StatusIsError) { _complete = true; return; }
+                session.ConfirmOwnedSaveDeleted();
+            }
         }
         CountsAsCycle = decision.CountCycle;
         _recoverFailure = decision.RecoverFailure;
@@ -236,7 +272,9 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
             FinishPause(ctx, "已完成最終層與收尾，任務已停止。");
             return;
         }
-        if (decision.Error.Length > 0)
+        if (retainedUnidentifiedTerminalSave)
+            ctx.StatusLine = "終局已完成；未識別原存檔槽位，因此保留存檔。";
+        else if (decision.Error.Length > 0)
         {
             ctx.StatusLine = ctx.AttemptAbortReason + decision.Error + " FSD 已停止。";
             ctx.StatusIsError = true;
@@ -354,7 +392,8 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
                 Service.Log.Info($"[Farming] Resumed existing duty: floor={ctx.Duty.Floor}, entryFloor={_entryFloor}, ownedSlot={session.OwnedSlot}, holdOnFailure={session.Plan.HoldOnFailure}");
                 return true;
             }
-            if (session.Plan.SaveUse == SaveUse.Prepared || session.OwnedSlot >= 0)
+            if (session.Plan.SaveUse == SaveUse.Prepared || session.OwnedSlot >= 0 ||
+                session.Plan.ContinuesExistingProgress)
             {
                 var source = session.PrepareSource();
                 _entry = new(_dungeon, source.ExpectedFloor ?? 0, prepared: source);
@@ -399,6 +438,12 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
         if (_creatingSave && !session.BindCreatedSave(entry.Slot))
         {
             ctx.StatusLine = "入場來源未由本任務建立；停止自動化，請手動退本。";
+            ctx.StatusIsError = true;
+            return false;
+        }
+        if (session.Plan.ContinuesExistingProgress && session.OwnedSlot < 0 && !session.BindContinuationSave())
+        {
+            ctx.StatusLine = "接續存檔未通過槽位驗證；停止自動化，請檢查存檔。";
             ctx.StatusIsError = true;
             return false;
         }

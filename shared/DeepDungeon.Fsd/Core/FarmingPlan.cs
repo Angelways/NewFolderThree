@@ -24,6 +24,8 @@ public sealed record FarmingPlan(
     // Run-only diagnostic option: retain the duty and save for in-place inspection.
     public bool HoldOnFailure { get; init; }
     public bool HoldAfterClear { get; init; }
+    // In-place continuation adopts the current duty's save after the first clear.
+    public bool ContinuesExistingProgress { get; init; }
     public bool IsProgression => IsProgressionMode(Mode);
     public bool StopsForTerminalReview => IsProgression && StopAfterFloor == MaxFloor;
     public bool ReusesSave => Mode is FarmingMode.Aetherpool or FarmingMode.HoardDiscovery;

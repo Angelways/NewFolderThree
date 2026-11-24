@@ -2,7 +2,7 @@ namespace NewFolderThree;
 
 internal sealed class CombatTimer
 {
-    internal const long IdleMilliseconds = 30_000;
+    internal const long IdleMilliseconds = 10_000;
     private const long RetryMilliseconds = 2_000;
 
     private long? lastActivity;

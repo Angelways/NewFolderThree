@@ -17,6 +17,7 @@ internal static class Program
         passed += Run("local-manifest-identity", TestLocalManifestIdentity);
         passed += Run("full-save-replacement", TestFullSaveReplacement);
         passed += Run("normal-summit-progression", TestNormalSummitProgression);
+        passed += Run("current-duty-continuation-floor-routing", TestCurrentDutyContinuationFloorRouting);
         passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
         Console.WriteLine($"NewFolderThree contract tests: {passed} passed");
@@ -87,7 +88,49 @@ internal static class Program
             var retry = FarmingSessionPolicy.Decide(plan!, new(first + 10, false, true, false, false));
             Assert(retry is { CountCycle: false, DeleteOwnedSave: true, RecoverFailure: true } && retry.NextFloor == first,
                 "A retry must return to the configured summit start.");
+
+            var attachedPlan = plan! with { ContinuesExistingProgress = true };
+            var interrupted = FarmingSessionPolicy.Decide(attachedPlan,
+                new FarmingAttemptResult(first, false, false, false, true));
+            var failedAttached = FarmingSessionPolicy.Decide(attachedPlan,
+                new FarmingAttemptResult(first, false, true, false, false));
+            Assert(!interrupted.DeleteOwnedSave && !failedAttached.DeleteOwnedSave &&
+                   !failedAttached.RecoverFailure && failedAttached.Error.Length > 0,
+                "Interrupted current-duty continuation must preserve its unverified source save.");
         }
+    }
+
+    private static void TestCurrentDutyContinuationFloorRouting()
+    {
+        foreach (var (dungeon, maxFloor) in new (uint, int)[] { (1, 200), (2, 100) })
+        {
+            for (int floor = 1; floor <= maxFloor; floor++)
+            {
+                Assert(CurrentDutyContinuationPolicy.TryCreate(dungeon, floor,
+                        out var continuation, out var error) && error.Length == 0,
+                    $"Floor {floor} must be recognized for dungeon {dungeon}.");
+                int blockStart = floor % 10 == 0 ? floor - 9 : floor - ((floor - 1) % 10);
+                Assert(continuation.BlockStartFloor == blockStart &&
+                       continuation.IsTenFloorBoundary == (floor % 10 == 0 && floor != maxFloor) &&
+                       continuation.IsResultFloor == (floor == maxFloor) &&
+                       continuation.BlockEndFloor == Math.Min(blockStart + 9, maxFloor),
+                    $"Floor {floor} must route to the correct ten-floor block.");
+            }
+        }
+
+        Assert(!CurrentDutyContinuationPolicy.TryCreate(4, 1, out _, out _) &&
+               !CurrentDutyContinuationPolicy.TryCreate(1, 0, out _, out _) &&
+               !CurrentDutyContinuationPolicy.TryCreate(2, 101, out _, out _),
+            "Only valid floors in PotD and Heaven-on-High can use current-duty continuation.");
+
+        var firstSave = new SaveSlotSnapshot(0, false, 11, "第 11 層", "slot-0");
+        var otherSave = new SaveSlotSnapshot(1, false, 21, "第 21 層", "slot-1");
+        Assert(CurrentDutyContinuationPolicy.TryResolveSave([firstSave, otherSave], 11, 200,
+                out var resolved, out _) && resolved == firstSave,
+            "Continuation must bind the unique save at the next ten-floor block.");
+        Assert(!CurrentDutyContinuationPolicy.TryResolveSave([firstSave, otherSave], 31, 200, out _, out _) &&
+               !CurrentDutyContinuationPolicy.TryResolveSave([firstSave, firstSave with { Index = 1 }], 11, 200, out _, out _),
+            "Continuation must stop when the expected save is missing or ambiguous.");
     }
 
     private static void TestPotdSpeedFloorGate()

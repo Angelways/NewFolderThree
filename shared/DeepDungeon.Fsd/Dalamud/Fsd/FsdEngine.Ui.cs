@@ -371,6 +371,21 @@ namespace DeepDungeon.Fsd.Dalamud
 							Service.Log.Error($"[FsdEngine] Run-log export failed: {ex}");
 						}
 					}
+					ImGui.SameLine();
+					bool canContinueCurrentDuty = !fsdRunning && inDD && _dutyState is { IsInDuty: true } duty &&
+						!duty.IsTransitioning && duty.DungeonId is 1 or 2 && duty.Floor > 0;
+					ImGui.BeginDisabled(!canContinueCurrentDuty);
+					if (ImGui.Button("继续探索##fsf_continue_current"))
+					{
+						if (!TryContinueCurrentDuty(out var continuationError))
+						{
+							_farmingError = continuationError;
+							Service.Log.Warning($"[Necromancer] Current-duty continuation rejected: {continuationError}");
+						}
+						else
+							_farmingError = null;
+					}
+					ImGui.EndDisabled();
                     if (liveMaps != null)
                     {
                         ImGui.SameLine();

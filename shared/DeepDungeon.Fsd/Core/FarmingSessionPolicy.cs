@@ -17,12 +17,18 @@ public static class FarmingSessionPolicy
         bool ownsSave = plan.SaveUse == SaveUse.Create;
         if (plan.HoldOnFailure && (result.DutyFailed || result.Aborted))
             return new(false, result.EntryFloor, false, false, "診斷已停止；保留副本與存檔，等待人工處理。");
+        if (result.Aborted && plan.ContinuesExistingProgress)
+            return new(false, result.EntryFloor, false, false, "接續攻略已中止；保留原存檔，未自動刪除或重開。");
         if (result.Aborted)
             return new(false, plan.StartFloor, ownsSave, false, "本次入本已中止，未計完成次數。");
         if (result.DutyFailed)
+        {
+            if (plan.ContinuesExistingProgress)
+                return new(false, result.EntryFloor, false, false, "接續攻略失敗；已停止並保留原存檔。");
             return plan.IsProgression
                 ? new(false, plan.StartFloor, true, true, string.Empty)
                 : new(false, plan.StartFloor, ownsSave, false, "本次攻略失敗，未計完成次數。");
+        }
         if (plan.ReusesSave)
             return new(result.HarvestCompleted, 0, false, false,
                 result.HarvestCompleted ? string.Empty : "採集未正常收尾，未計完成次數。");
@@ -34,7 +40,7 @@ public static class FarmingSessionPolicy
             if (result.EntryFloor < plan.StartFloor || result.EntryFloor > terminalEntry || result.EntryFloor % 10 != 1)
                 return new(false, result.EntryFloor, false, false, "攻略起點無效，停止接續。");
             return result.EntryFloor >= terminalEntry
-                ? new(true, plan.StartFloor, true, false, string.Empty)
+                ? new(true, plan.StartFloor, ownsSave, false, string.Empty)
                 : new(false, result.EntryFloor + 10, false, false, string.Empty);
         }
         return new(true, plan.StartFloor, ownsSave, false, string.Empty);
