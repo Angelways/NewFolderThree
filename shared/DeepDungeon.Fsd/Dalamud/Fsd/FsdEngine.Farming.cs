@@ -1,3 +1,4 @@
+using System.Numerics;
 using global::Dalamud.Bindings.ImGui;
 using DeepDungeon.Fsd.Core;
 using DeepDungeon.Fsd.Dalamud.GameState;
@@ -9,6 +10,11 @@ namespace DeepDungeon.Fsd.Dalamud;
 internal partial class FsdEngine
 {
     private string? _farmingError;
+    private const string SaveConfirmationTitle = "確認啟動 FSD###fsd_save_confirmation";
+    private const long SaveConfirmationHoldMs = 5000;
+    private (ulong Character, FsdFarmingRequest Request)? _pendingFarmingStart;
+    private long? _saveConfirmationHoldStartedAt;
+    private int _saveConfirmationHoldFrame;
     private static readonly string[] FarmingModeLabels =
         ["挖寶藏", "強化／陶片", "寶藏發現成就", "死靈術士（成就）", "普通登頂"];
     private static readonly string[] ProgressionModeLabels = ["死靈術士（成就）", "普通登頂"];
@@ -204,10 +210,16 @@ internal partial class FsdEngine
 
     public FsdControlResult StartSelectedFarming(FsdStartRequest request)
     {
-        var settings = _configuration.Farming;
-        uint dungeonId = settings.DungeonId is 1 or 2 ? settings.DungeonId : 4u;
         if (request.Scenario == FsdStartScenario.ControlledSurvey)
             return new FsdControlResult(false, "妖宮受控採集已移除。");
+        bool started = TryStartFarming(CreateSelectedFarmingRequest(request), out string error);
+        return new FsdControlResult(started, error);
+    }
+
+    private FsdFarmingRequest CreateSelectedFarmingRequest(FsdStartRequest request)
+    {
+        var settings = _configuration.Farming;
+        uint dungeonId = settings.DungeonId is 1 or 2 ? settings.DungeonId : 4u;
         var effectiveMode = settings.GetMode(dungeonId);
         var p = settings.GetPreferences(_configuration, effectiveMode);
         bool prepared = effectiveMode is FarmingMode.Aetherpool or FarmingMode.HoardDiscovery;
@@ -217,12 +229,117 @@ internal partial class FsdEngine
             FarmingMode.NormalSummit => FarmingPlan.SummitStartFloor(dungeonId),
             _ => _fsfScenarioIndex == 0 ? 21 : 31
         };
-        var farming = new FsdFarmingRequest(effectiveMode, prepared ? SaveUse.Prepared : SaveUse.Create,
+        return new FsdFarmingRequest(effectiveMode, prepared ? SaveUse.Prepared : SaveUse.Create,
             startFloor, p.Cycles, p.Infinite,
             new FarmingTargets(p.BandedEnabled == true, p.OpenGold, p.OpenSilver, p.OpenBronze),
             request, DungeonId: dungeonId);
-        bool started = TryStartFarming(farming, out string error);
-        return new FsdControlResult(started, error);
+    }
+
+    private void OnFarmingStartClicked()
+    {
+        var request = CreateSelectedFarmingRequest(new FsdStartRequest());
+        ulong character = Service.PlayerState.ContentId;
+        if (character == 0 || !HasResumableSave(character, request.DungeonId))
+        {
+            StartFarmingFromUi(request);
+            return;
+        }
+
+        _pendingFarmingStart = (character, request);
+        _saveConfirmationHoldStartedAt = null;
+        ImGui.OpenPopup(SaveConfirmationTitle);
+    }
+
+    private void DrawFarmingSaveConfirmation(bool startDisabled)
+    {
+        if (!ImGui.BeginPopupModal(SaveConfirmationTitle, ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            _pendingFarmingStart = null;
+            _saveConfirmationHoldStartedAt = null;
+            return;
+        }
+
+        try
+        {
+            if (_pendingFarmingStart is not { } pending || pending.Character != Service.PlayerState.ContentId)
+            {
+                CloseFarmingSaveConfirmation();
+                return;
+            }
+
+            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetFontSize() * 27);
+            ImGui.TextWrapped("當前地宮存在可以自動繼續的存檔，請移步自動繼續標籤頁查看。如果您確定要開啟新的存檔，請長按下方的確認按鈕，此操作可能導致你的存檔消失。");
+            ImGui.PopTextWrapPos();
+            ImGui.Spacing();
+            if (ImGui.Button("取消"))
+            {
+                CloseFarmingSaveConfirmation();
+                return;
+            }
+
+            ImGui.SameLine();
+            ImGui.BeginDisabled(startDisabled);
+            ImGui.Button("確認（長按 5 秒）", new Vector2(0f, ImGui.GetFrameHeight() + 4f));
+            bool holding = !startDisabled && ImGui.IsItemActive() && ImGui.IsItemHovered() &&
+                ImGui.IsMouseDown(ImGuiMouseButton.Left);
+            ImGui.EndDisabled();
+
+            float progress = UpdateSaveConfirmationHold(holding, ImGui.IsMouseClicked(ImGuiMouseButton.Left),
+                ImGui.GetFrameCount(), Environment.TickCount64);
+            if (progress <= 0f)
+                return;
+            Vector2 min = ImGui.GetItemRectMin();
+            Vector2 max = ImGui.GetItemRectMax();
+            const float inset = 2f;
+            float progressWidth = (max.X - min.X - 2 * inset) * progress;
+            if (progressWidth > 0f)
+                ImGui.GetWindowDrawList().AddRectFilled(new Vector2(min.X + inset, max.Y - 5f),
+                    new Vector2(min.X + inset + progressWidth, max.Y - inset), 0xff9ee769);
+            if (progress < 1f)
+                return;
+
+            CloseFarmingSaveConfirmation();
+            StartFarmingFromUi(pending.Request);
+        }
+        finally
+        {
+            ImGui.EndPopup();
+        }
+    }
+
+    private float UpdateSaveConfirmationHold(bool holding, bool pressed, int frame, long now)
+    {
+        if (!holding || _saveConfirmationHoldFrame != frame - 1)
+            _saveConfirmationHoldStartedAt = null;
+        if (holding && pressed)
+            _saveConfirmationHoldStartedAt = now;
+        _saveConfirmationHoldFrame = frame;
+        return _saveConfirmationHoldStartedAt is { } startedAt
+            ? Math.Clamp((now - startedAt) / (float)SaveConfirmationHoldMs, 0f, 1f)
+            : 0f;
+    }
+
+    private void CloseFarmingSaveConfirmation()
+    {
+        _pendingFarmingStart = null;
+        _saveConfirmationHoldStartedAt = null;
+        ImGui.CloseCurrentPopup();
+    }
+
+    private void StartFarmingFromUi(FsdFarmingRequest request)
+    {
+        try
+        {
+            bool started = TryStartFarming(request, out string error);
+            _farmingError = started ? null : error;
+            if (!started)
+                Service.Log.Warning($"[Necromancer] FSD start rejected: {error}");
+        }
+        catch (Exception ex)
+        {
+            _farmingError = "啟動 FSD 時發生錯誤，請檢查日誌。";
+            Service.Log.Error($"[Necromancer] FSD start failed: {ex}");
+        }
     }
 
     public bool TryStartFarming(FsdFarmingRequest request, out string error)

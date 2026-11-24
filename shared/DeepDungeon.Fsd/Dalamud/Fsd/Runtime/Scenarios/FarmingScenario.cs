@@ -25,6 +25,17 @@ internal sealed class FarmingScenario(FarmingSession session) : IScenario
         session.Plan is { IsProgression: true, HoldAfterClear: false, StopAfterFloor: null } &&
         _context is { Duty.IsInDuty: true, DutyFailureObserved: false, AttemptAborted: false };
 
+    internal void CancelPause()
+    {
+        if (_complete || session.PersistPause == null) return;
+        session.PersistPause = null;
+        if (_verification == null) return;
+        _verification.Dispose();
+        _verification = null;
+        if (_context is { } ctx)
+            ctx.StatusLine = "已取消暫停，將繼續原流程。";
+    }
+
     public string Name => $"{DungeonShortLabel(session.Plan.DungeonId)} {session.Plan.DisplayName} ({(session.Plan.SaveUse == SaveUse.Prepared ? session.Source.Description : $"{session.NextFloor} 層")})";
     public bool IsComplete => _complete;
     public bool ShouldLoop => !_aborted;

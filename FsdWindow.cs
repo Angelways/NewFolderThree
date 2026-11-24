@@ -103,8 +103,9 @@ internal sealed class FsdWindow : Window
         }
 
         ImGui.Separator();
-        ImGui.TextWrapped("移速調整適用於死者宮殿 1–200 層及天之御柱 1–100 層，整十層除外。導航使用生效後的移速。");
-        ImGui.TextWrapped("機工士技能 2890 在死者宮殿 141–149、151–159……191–199 層，以及天之御柱 91–99 層會被攔截。一般施放與地面目標施放都會檢查原始及調整後的技能 ID。");
+        ImGui.TextWrapped("本移速調整適用於死者宮殿及天之御柱，整十層除外。");
+        ImGui.Separator();
+        ImGui.TextWrapped("同時，本插件會在特定的層數阻止某些危險技能的釋放。");
         ImGui.Separator();
         ImGui.TextWrapped(_potdSpeed.Status);
 

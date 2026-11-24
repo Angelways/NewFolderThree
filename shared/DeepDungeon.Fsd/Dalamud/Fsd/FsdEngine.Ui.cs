@@ -317,24 +317,13 @@ namespace DeepDungeon.Fsd.Dalamud
 
 					ImGui.Spacing();
 					ImGui.Indent();
-					ImGui.BeginDisabled(fsdRunning || inDD || _bridgeLeaveDutyContext != null || _bridgeDeleteSaveContext != null || _bridgeDeleteSaveFlow != null);
+					bool startDisabled = fsdRunning || inDD || _bridgeLeaveDutyContext != null ||
+						_bridgeDeleteSaveContext != null || _bridgeDeleteSaveFlow != null;
+					ImGui.BeginDisabled(startDisabled);
 					if (ImGui.Button("啟動 FSD##fsf_start_top"))
-					{
-						try
-						{
-                            var result = StartSelectedFarming(new FsdStartRequest());
-                            _farmingError = result.Ok ? null : result.Error;
-                            if (!result.Ok)
-                            {
-                                Service.Log.Warning($"[Necromancer] FSD start rejected: {result.Error}");
-                            }
-						}
-						catch (Exception ex)
-						{
-							Service.Log.Error($"[Necromancer] FSF start failed: {ex}");
-						}
-					}
+						OnFarmingStartClicked();
 					ImGui.EndDisabled();
+					DrawFarmingSaveConfirmation(startDisabled);
 					ImGui.SameLine();
 					ImGui.BeginDisabled(!fsdRunning);
 					if (ImGui.Button("停止##fsf_stop_top"))
@@ -342,10 +331,27 @@ namespace DeepDungeon.Fsd.Dalamud
 						StopFullSelfDelving();
 					}
 					ImGui.EndDisabled();
-                    if (CanRequestProgressionPause)
+                    bool pauseActive = ProgressionPauseLocked;
+                    if (pauseActive || CanRequestProgressionPause)
                     {
                         ImGui.SameLine();
-                        if (ImGui.Button("本組出本後暫停")) RequestProgressionPause();
+                        if (pauseActive)
+                        {
+                            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.12f, 0.43f, 0.27f, 1f));
+                            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.16f, 0.53f, 0.34f, 1f));
+                            ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.10f, 0.36f, 0.22f, 1f));
+                        }
+                        bool toggle = ImGui.Button(pauseActive
+                            ? "本組出本後暫停（已啟用）###fsf_pause_top"
+                            : "本組出本後暫停###fsf_pause_top");
+                        if (pauseActive) ImGui.PopStyleColor(3);
+                        if (toggle)
+                        {
+                            if (pauseActive)
+                                _ddHost?.ActiveFarming?.CancelPause();
+                            else
+                                RequestProgressionPause();
+                        }
                     }
 					ImGui.SameLine();
 					if (ImGui.Button("導出日誌##fsf_export_logs_top"))

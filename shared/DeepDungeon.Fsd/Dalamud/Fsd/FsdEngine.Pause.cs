@@ -20,6 +20,13 @@ internal partial class FsdEngine
     private bool ProgressionPauseLocked => _ddHost?.ActiveFarming?.Session.PersistPause != null;
     private bool CanRequestProgressionPause => !ProgressionPauseLocked && _ddHost?.ActiveFarming?.CanRequestPause == true;
 
+    private bool HasResumableSave(ulong character, uint dungeonId)
+    {
+        RefreshResumeSaves();
+        return _resumeSaves.Any(save => save.Checkpoint.Character == character &&
+            save.Checkpoint.Plan.DungeonId == dungeonId);
+    }
+
     private static ProgressionCheckpoint ReadProgressionCheckpoint(string path)
     {
         var checkpoint = JsonSerializer.Deserialize<ProgressionCheckpoint>(File.ReadAllBytes(path));
