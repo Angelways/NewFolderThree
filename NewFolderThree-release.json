@@ -5,6 +5,7 @@
     "Punchline": "可以挖寶.",
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
+    "Changelog": "合併 Lulimmm 作出的貢獻。\n新增機工士危險技能攔截。\n新增深宮專用移速。",
     "AssemblyVersion": "0.7.55.25",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
