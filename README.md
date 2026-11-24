@@ -13,3 +13,9 @@ https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFo
 歡迎提交 [Pull Request（PR）](https://github.com/Angelways/NewFolderThree/pulls)。
 
 [版本與下載](https://github.com/Angelways/NewFolderThree/releases)
+
+## 貢獻者
+
+- [MewDust（原 Lulimmm）](https://github.com/MewDust) 於 [PR #1](https://github.com/Angelways/NewFolderThree/pull/1) 貢獻深宮移速調整與機工士危險技能攔截。
+
+[查看完整貢獻者統計](https://github.com/Angelways/NewFolderThree/graphs/contributors)
