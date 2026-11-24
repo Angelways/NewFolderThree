@@ -6,6 +6,7 @@ using Dalamud.Plugin.Services;
 using DeepDungeon.Fsd.Core;
 using DeepDungeon.Fsd.Dalamud.Utilities;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using OmenTools.Interop.Game.Models.Native;
 
 namespace NewFolderThree;
 
@@ -44,7 +45,7 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
     private volatile bool _speedBlockedByStatus;
     private int _currentFloor;
     private uint _currentDungeonId;
-    private string _status = "等待速度签名";
+    private string _status = "等待移速簽章";
     private bool _speedHookEnabled;
     private bool _accelerationHookEnabled;
     private long _nextStatusRefreshTimestamp;
@@ -99,15 +100,15 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
 
     public float GetNavigationMovementSpeed()
     {
-        float baseSpeed = DirectMovementController.TryReadNativeMotion(out var motion)
-            ? motion.TargetSpeed > 0 ? motion.TargetSpeed : motion.BaseSpeed > 0 ? motion.BaseSpeed : 6f
-            : 6f;
-        return PotdMovementSpeedPolicy.ApplySpeedAddition(
+        if (!DirectMovementController.TryReadNativeMotion(out var motion))
+            motion = default;
+        return PotdMovementSpeedPolicy.EstimateNavigationSpeed(
             _currentDungeonId,
             _currentFloor,
-            baseSpeed,
+            motion.TargetSpeed,
+            motion.BaseSpeed,
             GetFloat(ref _speedAdditionBits),
-            _speedAdjustmentAllowed);
+            _speedHookEnabled && _speedAdjustmentAllowed);
     }
 
     private void Update(IFramework _)
@@ -125,8 +126,8 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
             _currentDungeonId = 0;
             _currentFloor = 0;
             _isEligibleFloor = false;
-            _status = "楼层读取失败，移速修改保持关闭";
-            _log.Warning(ex, "读取死者宫殿层数失败，移速修改保持关闭。");
+            _status = "樓層讀取失敗，移速調整維持關閉";
+            _log.Warning(ex, "讀取深宮層數失敗，移速調整維持關閉。");
         }
 
         if (!_isEligibleFloor)
@@ -136,7 +137,7 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
             _hasOriginalSpeed = false;
             _nextStatusRefreshTimestamp = 0;
             UpdateHookState();
-            if (_status != "楼层读取失败，移速修改保持关闭")
+            if (_status != "樓層讀取失敗，移速調整維持關閉")
                 _status = DescribeInactiveFloor();
             return;
         }
@@ -147,15 +148,15 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
         UpdateHookState();
 
         if (_speedHook is null)
-            _status = "速度签名不可用";
+            _status = "移速簽章無法使用";
         else if (!_enabled())
-            _status = "移速调整未启用";
+            _status = "移速調整未啟用";
         else if (!float.IsFinite(GetFloat(ref _speedAdditionBits)) || GetFloat(ref _speedAdditionBits) == 0f)
-            _status = "移速增加值为 0";
+            _status = "移速增量為 0";
         else if (_speedBlockedByStatus)
-            _status = "当前受限制状态影响";
+            _status = "目前受限制狀態影響";
         else
-            _status = $"{CurrentDungeonName()} {_currentFloor} 层移速 Hook 已启用";
+            _status = $"{CurrentDungeonName()} {_currentFloor} 層移速調整已啟用";
     }
 
     private unsafe void ReadCurrentFloor(out uint dungeonId, out int floor)
@@ -180,16 +181,16 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
     {
         string dungeonName = CurrentDungeonName();
         if (dungeonName.Length == 0)
-            return "仅限死者宫殿和天之宫殿";
+            return "僅限死者宮殿與天之御柱";
         if (_currentFloor < 1 || _currentFloor > PotdMovementSpeedPolicy.MaximumFloor(_currentDungeonId))
-            return $"等待读取{dungeonName}层数";
-        return $"{dungeonName} {_currentFloor} 层不启用移速修改";
+            return $"等待讀取{dungeonName}層數";
+        return $"{dungeonName} {_currentFloor} 層不啟用移速調整";
     }
 
     private string CurrentDungeonName() => _currentDungeonId switch
     {
-        PotdMovementSpeedPolicy.PalaceOfTheDeadDungeonId => "死者宫殿",
-        PotdMovementSpeedPolicy.HeavenOnHighDungeonId => "天之宫殿",
+        PotdMovementSpeedPolicy.PalaceOfTheDeadDungeonId => "死者宮殿",
+        PotdMovementSpeedPolicy.HeavenOnHighDungeonId => "天之御柱",
         _ => string.Empty
     };
 
@@ -199,7 +200,7 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
         {
             var speedAddress = _sigScanner.ScanText(SpeedSignature);
             if (speedAddress == nint.Zero)
-                throw new InvalidOperationException("速度签名未匹配到地址。");
+                throw new InvalidOperationException("移速簽章未比對到位址。");
 
             _speedHook = _interop.HookFromAddress<SpeedDelegate>(speedAddress, OnSpeed);
 
@@ -211,13 +212,13 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
                     OnAcceleration);
             }
 
-            _status = "速度签名已匹配";
+            _status = "移速簽章已比對";
         }
         catch (Exception ex)
         {
             DisposeHooks();
-            _status = "速度签名不可用，移速 Hook 未启用";
-            _log.Warning(ex, "NewFloder 深宫移速签名未匹配，移速调整已禁用。");
+            _status = "移速簽章無法使用，移速調整未啟用";
+            _log.Warning(ex, "NewFolderThree 深宮移速簽章未比對成功，移速調整已停用。");
         }
     }
 
@@ -234,10 +235,27 @@ internal sealed unsafe class DeepDungeonSpeedController : IDisposable
 
     private void OnAcceleration(nint a1)
     {
-        if (_accelerationHookEnabled && a1 != nint.Zero)
-            *(float*)(a1 + 0x44) = 100f;
+        var original = _accelerationHook!.Original;
+        if (!_accelerationHookEnabled || a1 == nint.Zero)
+        {
+            original(a1);
+            return;
+        }
 
-        _accelerationHook!.Original(a1);
+        const float seedSpeed = 100f;
+        var controller = (PlayerMoveControllerWalk*)a1;
+        float previousSpeed = controller->CurrentSpeed;
+        controller->CurrentSpeed = seedSpeed;
+        try
+        {
+            original(a1);
+        }
+        finally
+        {
+            // The native update can exit without assigning a new speed.
+            if (controller->CurrentSpeed == seedSpeed)
+                controller->CurrentSpeed = previousSpeed;
+        }
     }
 
     private void RefreshRuntimeCache(long now)

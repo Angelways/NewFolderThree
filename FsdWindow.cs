@@ -60,7 +60,7 @@ internal sealed class FsdWindow : Window
             ImGui.EndTabItem();
         }
 
-        if (ImGui.BeginTabItem("深宫移速"))
+        if (ImGui.BeginTabItem("深宮移速"))
         {
             DrawPotdSpeedSettings();
             ImGui.EndTabItem();
@@ -84,10 +84,10 @@ internal sealed class FsdWindow : Window
     private void DrawPotdSpeedSettings()
     {
         bool enabled = _configuration.PotdSpeedEnabled;
-        bool changed = ImGui.Checkbox("启用移速调整", ref enabled);
+        bool changed = ImGui.Checkbox("啟用移速調整", ref enabled);
 
         float addition = _configuration.PotdSpeedAddition;
-        changed |= ImGui.SliderFloat("移速增加", ref addition, 0f, 5f, "%.2f");
+        changed |= ImGui.SliderFloat("移速倍率增量", ref addition, 0f, 5f, "%.2f");
 
         bool maxAcceleration = _configuration.PotdMaxAcceleration;
         changed |= ImGui.Checkbox("最大加速度", ref maxAcceleration);
@@ -103,11 +103,11 @@ internal sealed class FsdWindow : Window
         }
 
         ImGui.Separator();
-        ImGui.TextWrapped("移速：死者宫殿 1–200 层、天之宫殿 1–100 层的非整十层生效，并同步用于导航速度估算。");
-        ImGui.TextWrapped("2890 拦截：机工士在死者宫殿 141–149、151–159……191–199 层，以及天之宫殿 91–99 层释放时拦截。包含调整后的技能 ID，以及普通和地面目标施放。");
+        ImGui.TextWrapped("移速調整適用於死者宮殿 1–200 層及天之御柱 1–100 層，整十層除外。導航使用生效後的移速。");
+        ImGui.TextWrapped("機工士技能 2890 在死者宮殿 141–149、151–159……191–199 層，以及天之御柱 91–99 層會被攔截。一般施放與地面目標施放都會檢查原始及調整後的技能 ID。");
         ImGui.Separator();
         ImGui.TextWrapped(_potdSpeed.Status);
-        ImGui.TextDisabled("其他深宫不应用移速调整；所有整十层均排除。");
+
     }
 
 }

@@ -117,15 +117,17 @@ internal static class Program
                !PotdMovementSpeedPolicy.IsEligibleFloor(2, 101),
             "Floors outside the Heaven-on-High 1-100 range must not enable speed adjustment.");
 
-        Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(1, 11, 6f, 0.5f, true) == 6.5f,
-            "Navigation speed must include the active PotD speed addition.");
-        Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(2, 91, 6f, 0.5f, true) == 6.5f,
-            "Navigation speed must include the active Heaven-on-High speed addition.");
-        Assert(PotdMovementSpeedPolicy.ApplySpeedAddition(1, 10, 6f, 0.5f, true) == 6f &&
-               PotdMovementSpeedPolicy.ApplySpeedAddition(2, 100, 6f, 0.5f, true) == 6f &&
-               PotdMovementSpeedPolicy.ApplySpeedAddition(3, 11, 6f, 0.5f, true) == 6f &&
-               PotdMovementSpeedPolicy.ApplySpeedAddition(1, 11, 6f, 0.5f, false) == 6f,
-            "Navigation speed must remain unchanged outside active non-boss floors in supported dungeons.");
+        Assert(PotdMovementSpeedPolicy.EstimateNavigationSpeed(1, 11, 9f, 6f, 0.5f, true) == 9f &&
+               PotdMovementSpeedPolicy.EstimateNavigationSpeed(2, 91, 9f, 6f, 0.5f, true) == 9f,
+            "An effective native target speed must reach navigation without applying the multiplier twice.");
+        Assert(PotdMovementSpeedPolicy.EstimateNavigationSpeed(1, 11, 0f, 6f, 0.5f, true) == 9f &&
+               PotdMovementSpeedPolicy.EstimateNavigationSpeed(2, 91, 0f, 0f, 0.5f, true) == 9f,
+            "Without a native target speed, estimate from the base or default speed and the configured multiplier.");
+        Assert(PotdMovementSpeedPolicy.EstimateNavigationSpeed(1, 10, 0f, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.EstimateNavigationSpeed(2, 100, 0f, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.EstimateNavigationSpeed(3, 11, 0f, 6f, 0.5f, true) == 6f &&
+               PotdMovementSpeedPolicy.EstimateNavigationSpeed(1, 11, 0f, 6f, 0.5f, false) == 6f,
+            "Navigation must use the unadjusted fallback speed outside active non-boss floors.");
     }
 
     private static void TestPotdMachinistActionBlock()

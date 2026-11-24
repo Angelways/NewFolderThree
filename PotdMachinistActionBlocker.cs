@@ -47,7 +47,7 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
         catch (Exception ex)
         {
             DisposeHooks();
-            _log.Warning(ex, "机工士死者宫殿 2890 技能拦截 Hook 不可用，拦截保持关闭。");
+            _log.Warning(ex, "機工士深宮技能 2890 攔截 Hook 無法使用，攔截維持關閉。");
         }
     }
 
@@ -89,7 +89,7 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
             if ((DateTime.UtcNow - _lastReadFailureLogAt).TotalSeconds >= 2)
             {
                 _lastReadFailureLogAt = DateTime.UtcNow;
-                _log.Warning(ex, "读取死者宫殿楼层失败，2890 技能拦截保持关闭。");
+                _log.Warning(ex, "讀取深宮樓層失敗，技能 2890 攔截維持關閉。");
             }
         }
     }

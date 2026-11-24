@@ -17,13 +17,17 @@ public static class PotdMovementSpeedPolicy
         _ => 0
     };
 
-    public static float ApplySpeedAddition(
-        uint dungeonId, int floor, float baseSpeed, float speedAddition, bool adjustmentAllowed)
+    public static float EstimateNavigationSpeed(
+        uint dungeonId, int floor, float targetSpeed, float baseSpeed,
+        float multiplierAddition, bool adjustmentAllowed)
     {
-        if (!adjustmentAllowed || !IsEligibleFloor(dungeonId, floor) ||
-            !float.IsFinite(baseSpeed) || !float.IsFinite(speedAddition))
-            return baseSpeed;
+        // The native target speed already includes any active multiplier adjustment.
+        if (float.IsFinite(targetSpeed) && targetSpeed > 0f)
+            return targetSpeed;
 
-        return baseSpeed + speedAddition;
+        float fallbackSpeed = float.IsFinite(baseSpeed) && baseSpeed > 0f ? baseSpeed : 6f;
+        return adjustmentAllowed && IsEligibleFloor(dungeonId, floor) && float.IsFinite(multiplierAddition)
+            ? fallbackSpeed * (1f + multiplierAddition)
+            : fallbackSpeed;
     }
 }
