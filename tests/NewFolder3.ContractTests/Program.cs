@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Text.Json;
 using DeepDungeon.Fsd.Core;
 using DeepDungeon.Fsd.Dalamud;
@@ -22,6 +23,7 @@ internal static class Program
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
         passed += Run("rsr-machinist-action-control", TestRsrMachinistActionControl);
         passed += Run("boss-pull-on-idle-tenth-floor", TestBossPullTimer);
+        passed += Run("stable-passage-room-routing", TestStablePassageRoomRouting);
         Console.WriteLine($"NewFolderThree contract tests: {passed} passed");
         return 0;
     }
@@ -145,6 +147,31 @@ internal static class Program
         Assert(source.Observe([advanced, unrelated], out var resolved, out _) && resolved == advanced &&
                session.BindContinuationSave() && session.OwnedSlot == 0,
             "The selected slot must bind after advancing to the expected floor, even when the other slot has the same floor.");
+    }
+
+    private static void TestStablePassageRoomRouting()
+    {
+        PassageSearchPoint[] rooms = [new(1, Vector3.Zero), new(2, new Vector3(10, 0, 0))];
+        var first = new PassageBeacon(10, 2009507, 4, new Vector3(6, 0, 0));
+        var second = new PassageBeacon(20, 2009507, 4, new Vector3(9, 0, 0));
+        var player = Vector3.Zero;
+        float Distance(Vector3 position) => Vector3.Distance(player, position);
+
+        var observed = PassageGoalPolicy.Select([second, first], rooms, Distance, _ => true);
+        Assert(observed == new PassageGoal(1, first.Position, first.ActorId),
+            "Distinct marked rooms must match distinct beacons and use the live position for traversal.");
+        var unloaded = PassageGoalPolicy.Select([second], rooms, Distance, _ => true);
+        Assert(unloaded == new PassageGoal(1, rooms[0].Position),
+            "Unloading one beacon must keep the nearest marked room as the search goal.");
+        var requested = PassageGoalPolicy.Select([first, second], rooms, Distance, _ => true, requestedRoom: 2);
+        Assert(requested == new PassageGoal(2, second.Position, second.ActorId),
+            "Manual travel to a marked room must use the beacon matched to that room.");
+
+        player = second.Position;
+        var committed = PassageGoalPolicy.Select([first with { State = 1 }, second], rooms,
+            Distance, _ => true, committedActor: first.ActorId);
+        Assert(committed == observed,
+            "A transient beacon state must preserve an in-progress exit traversal.");
     }
 
     private static void TestBossPullTimer()

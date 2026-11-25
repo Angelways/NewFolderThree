@@ -5,14 +5,14 @@
     "Punchline": "可以挖寶.",
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
-    "Changelog": "增加了中途继续功能，修复了一系列问题",
-    "AssemblyVersion": "0.7.55.29",
+    "Changelog": "修正出口燈籠載入或卸載時，開箱與清怪路線反覆切換的問題。多出口樓層依小地圖標記配對燈籠，踩點時使用燈籠的實際座標。",
+    "AssemblyVersion": "0.7.55.30",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Angelways/NewFolderThree",
     "IconUrl": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/icon.png",
-    "LastUpdate": 1795589888,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.29.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.29.zip"
+    "LastUpdate": 1795600400,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.30.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.30.zip"
   }
 ]
