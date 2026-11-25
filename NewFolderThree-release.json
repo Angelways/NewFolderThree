@@ -5,7 +5,7 @@
     "Punchline": "可以挖寶.",
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
-    "Changelog": "三個地宮的普通登頂模式新增「失敗後重新開始」，預設開啟。角色持續倒下 30 秒後退本，返回入口並可移動滿 0.5 秒後，從該地宮的普通登頂起始層重開。另可指定存檔已滿時自動清理第 1 槽或第 2 槽。",
+    "Changelog": "普通登頂模式增加了失敗時重啟的功能；自動清理存檔現在可以選擇刪除的槽位。",
     "AssemblyVersion": "0.7.55.32",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
