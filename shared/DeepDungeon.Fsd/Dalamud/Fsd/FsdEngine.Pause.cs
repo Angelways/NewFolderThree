@@ -218,6 +218,9 @@ internal partial class FsdEngine
                 useDetailedMap: false))
             return error;
 
+        if (checkpoint.Plan.ContinuesExistingProgress)
+            return "正在前往入口並確認存檔。";
+
         var settings = _configuration.Farming;
         settings.DungeonId = checkpoint.Plan.DungeonId;
         settings.SetMode(settings.DungeonId, checkpoint.Plan.Mode);

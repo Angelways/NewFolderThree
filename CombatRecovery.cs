@@ -2,11 +2,14 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
+using DeepDungeon.Fsd.Runtime;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using BattleNpcSubKind = Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind;
 using GameActionType = FFXIVClientStructs.FFXIV.Client.Game.ActionType;
 
 namespace NewFolderThree;
@@ -28,6 +31,7 @@ internal sealed partial class CombatRecovery : IDisposable
     private readonly Hook<ActionEffectHandler.Delegates.Receive> effectHook;
     private readonly ConcurrentQueue<ObservedAction> effects = new();
     private readonly CombatTimer timer = new();
+    private readonly BossPullTimer bossPull = new();
     private readonly List<CastEntry> history = [];
 
     private bool monitoringEnabled;
@@ -96,7 +100,8 @@ internal sealed partial class CombatRecovery : IDisposable
         }
     }
 
-    public unsafe void Update(bool fsdActive, bool canRecover, bool connected)
+    public unsafe void Update(bool fsdActive, bool canRecover, bool canPullBoss,
+        bool connected, in DeepDungeonStateSnapshot duty)
     {
         var now = Environment.TickCount64;
         if (fsdActive != wasFsdActive)
@@ -122,6 +127,7 @@ internal sealed partial class CombatRecovery : IDisposable
             restriction = "等待 FSD 允許輸出";
         var inCombat = conditions[ConditionFlag.InCombat];
         timer.UpdateCombat(monitoringEnabled && restriction == null && inCombat, now);
+        bossPull.Update(fsdActive && connected, duty, inCombat, now);
 
         while (effects.TryDequeue(out var effect))
         {
@@ -154,6 +160,12 @@ internal sealed partial class CombatRecovery : IDisposable
         {
             timer.Attempted(now);
             TryCast(now, false, player, manager, restriction);
+        }
+        else if (monitoringEnabled && canPullBoss && !inCombat && restriction == null &&
+            player != null && manager != null && pendingCast == null && bossPull.CanAttempt(now))
+        {
+            var target = FindPullTarget(player, manager);
+            bossPull.Attempted(now, target != null && TryCast(now, false, player, manager, null, target));
         }
     }
 
@@ -196,61 +208,89 @@ internal sealed partial class CombatRecovery : IDisposable
         }
     }
 
-    private unsafe void TryCast(
-        long now, bool isTest, IPlayerCharacter? player, ActionManager* manager, string? restriction)
+    private unsafe IBattleNpc? FindPullTarget(IPlayerCharacter player, ActionManager* manager)
+    {
+        uint actionId = manager->GetAdjustedActionId(SplitShotId);
+        if (actionId is not (SplitShotId or HeatedSplitShotId)) return null;
+
+        IBattleNpc? closest = null;
+        float distanceSquared = float.PositiveInfinity;
+        var playerPosition = player.Position;
+        foreach (var obj in objects)
+        {
+            if (obj is not IBattleNpc { IsTargetable: true, IsDead: false, CurrentHp: > 0, Address: not 0 } npc ||
+                (BattleNpcSubKind)npc.SubKind != BattleNpcSubKind.Combatant)
+                continue;
+            float distance = Vector3.DistanceSquared(playerPosition, npc.Position);
+            if (distance >= distanceSquared ||
+                !ActionManager.CanUseActionOnTarget(actionId, (GameObject*)npc.Address) ||
+                ActionManager.GetActionInRangeOrLoS(actionId, (GameObject*)player.Address, (GameObject*)npc.Address) != 0)
+                continue;
+            closest = npc;
+            distanceSquared = distance;
+        }
+        return closest;
+    }
+
+    private unsafe bool TryCast(
+        long now, bool isTest, IPlayerCharacter? player, ActionManager* manager, string? restriction,
+        IGameObject? pullTarget = null)
     {
         var origin = CastOrigin(isTest);
         if (restriction != null || player == null || manager == null)
         {
             castStatus = $"{origin}{restriction ?? "技能系統尚未就緒"}";
-            return;
+            return false;
         }
 
-        if (targets.Target is not { IsTargetable: true, IsDead: false } target)
+        if ((pullTarget ?? targets.Target) is not { IsTargetable: true, IsDead: false } target)
         {
             castStatus = $"{origin}請選擇可攻擊的存活目標";
-            return;
+            return false;
         }
 
         var actionId = manager->GetAdjustedActionId(SplitShotId);
         if (actionId is not (SplitShotId or HeatedSplitShotId))
         {
             castStatus = $"{origin}當前狀態下無法使用分裂彈";
-            return;
+            return false;
         }
 
         var targetObject = (GameObject*)target.Address;
         if (!ActionManager.CanUseActionOnTarget(actionId, targetObject))
         {
             castStatus = $"{origin}當前目標無法使用{SkillName(actionId)}";
-            return;
+            return false;
         }
 
         if (manager->ActionQueued || manager->AnimationLock > 0 || player.IsCasting)
         {
             castStatus = $"{origin}當前正在執行其他技能";
-            return;
+            return false;
         }
 
         var status = manager->GetActionStatus(GameActionType.Action, actionId, target.GameObjectId);
         if (status != 0)
         {
             castStatus = $"{origin}技能當前不可用（{status}）";
-            return;
+            return false;
         }
 
         // This entry point executes immediately. The regular action queue remains available to the player.
         var position = target.Position;
+        if (pullTarget != null)
+            targets.Target = pullTarget;
         var before = manager->LastUsedActionSequence;
         if (!manager->UseActionLocation(GameActionType.Action, actionId, target.GameObjectId, &position) ||
             manager->LastUsedActionSequence == before)
         {
             castStatus = $"{origin}{SkillName(actionId)}未發出";
-            return;
+            return false;
         }
 
         pendingCast = new PendingCast(actionId, manager->LastUsedActionSequence, now, isTest);
         castStatus = $"{origin}已發出{SkillName(actionId)}，等待生效確認";
+        return true;
     }
 
     private static string SkillName(uint actionId) => actionId == HeatedSplitShotId ? "熱分裂彈" : "分裂彈";

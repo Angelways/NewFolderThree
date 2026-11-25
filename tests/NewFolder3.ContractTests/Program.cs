@@ -20,6 +20,7 @@ internal static class Program
         passed += Run("current-duty-continuation-floor-routing", TestCurrentDutyContinuationFloorRouting);
         passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
+        passed += Run("boss-pull-on-idle-tenth-floor", TestBossPullTimer);
         Console.WriteLine($"NewFolderThree contract tests: {passed} passed");
         return 0;
     }
@@ -94,9 +95,13 @@ internal static class Program
                 new FarmingAttemptResult(first, false, false, false, true));
             var failedAttached = FarmingSessionPolicy.Decide(attachedPlan,
                 new FarmingAttemptResult(first, false, true, false, false));
+            var completedAttached = FarmingSessionPolicy.Decide(attachedPlan,
+                new FarmingAttemptResult(summit - 9, true, false, false, false));
             Assert(!interrupted.DeleteOwnedSave && !failedAttached.DeleteOwnedSave &&
                    !failedAttached.RecoverFailure && failedAttached.Error.Length > 0,
-                "Interrupted current-duty continuation must preserve its unverified source save.");
+                "Interrupted current-duty continuation must preserve its source save.");
+            Assert(completedAttached.CountCycle && !completedAttached.DeleteOwnedSave,
+                "Completed current-duty continuation must preserve its source save.");
         }
     }
 
@@ -113,7 +118,8 @@ internal static class Program
                 Assert(continuation.BlockStartFloor == blockStart &&
                        continuation.IsTenFloorBoundary == (floor % 10 == 0 && floor != maxFloor) &&
                        continuation.IsResultFloor == (floor == maxFloor) &&
-                       continuation.BlockEndFloor == Math.Min(blockStart + 9, maxFloor),
+                       continuation.BlockEndFloor == Math.Min(blockStart + 9, maxFloor) &&
+                       continuation.RequiresSaveSlot == (blockStart + 9 < maxFloor),
                     $"Floor {floor} must route to the correct ten-floor block.");
             }
         }
@@ -123,14 +129,48 @@ internal static class Program
                !CurrentDutyContinuationPolicy.TryCreate(2, 101, out _, out _),
             "Only valid floors in PotD and Heaven-on-High can use current-duty continuation.");
 
-        var firstSave = new SaveSlotSnapshot(0, false, 11, "第 11 層", "slot-0");
-        var otherSave = new SaveSlotSnapshot(1, false, 21, "第 21 層", "slot-1");
-        Assert(CurrentDutyContinuationPolicy.TryResolveSave([firstSave, otherSave], 11, 200,
-                out var resolved, out _) && resolved == firstSave,
-            "Continuation must bind the unique save at the next ten-floor block.");
-        Assert(!CurrentDutyContinuationPolicy.TryResolveSave([firstSave, otherSave], 31, 200, out _, out _) &&
-               !CurrentDutyContinuationPolicy.TryResolveSave([firstSave, firstSave with { Index = 1 }], 11, 200, out _, out _),
-            "Continuation must stop when the expected save is missing or ambiguous.");
+        var plan = new FarmingPlan(FarmingMode.DeepProgression, SaveUse.Create, 41, 1, false, false, true, true, false)
+        { DungeonId = 1, ContinuesExistingProgress = true };
+        var session = new FarmingSession(plan, continuationSlot: 0);
+        Assert(session.SourceSlot == 0 && session.OwnedSlot == -1,
+            "A selected slot is available for first-block pause verification before it is bound by entry.");
+        session.CompleteAttempt(new(false, 51, false, false, ""), 0);
+        var source = session.PrepareSource();
+        var original = new SaveSlotSnapshot(0, false, 41, "第 41 層", "original") { Enterable = false };
+        var unrelated = new SaveSlotSnapshot(1, false, 51, "第 51 層", "unrelated");
+        Assert(!source.Observe([original, unrelated], out _, out _),
+            "Matching the next floor in the other slot must not take over an unrelated save.");
+        var advanced = original with { StartFloor = 51, Enterable = true };
+        Assert(source.Observe([advanced, unrelated], out var resolved, out _) && resolved == advanced &&
+               session.BindContinuationSave() && session.OwnedSlot == 0,
+            "The selected slot must bind after advancing to the expected floor, even when the other slot has the same floor.");
+    }
+
+    private static void TestBossPullTimer()
+    {
+        var timer = new BossPullTimer();
+        foreach (var (dungeon, terminal) in new (uint, byte)[] { (1, 200), (2, 100), (4, 100) })
+        {
+            var floor = new DeepDungeonStateSnapshot(true, true, true, dungeon, 10, DeepDungeonFloorKind.Boss, false, 0);
+            timer.Update(true, floor, false, 0);
+            Assert(!timer.CanAttempt(29_999) && timer.CanAttempt(30_000), "Boss pull must wait 30 seconds.");
+            timer.Attempted(30_000, dispatched: false);
+            Assert(!timer.CanAttempt(30_999) && timer.CanAttempt(31_000), "An unavailable target may be retried.");
+            timer.Attempted(31_000, dispatched: true);
+            Assert(!timer.CanAttempt(60_000), "A dispatched boss pull must not be repeated on the same floor.");
+
+            var next = floor with { Floor = 20 };
+            timer.Update(true, next, false, 60_000);
+            timer.Update(true, next, true, 70_000);
+            timer.Update(true, next, false, 80_000);
+            Assert(!timer.CanAttempt(90_000), "Natural combat must cancel the pull for that floor.");
+            timer.Update(true, floor with { Floor = terminal }, false, 90_000);
+            Assert(!timer.CanAttempt(120_000), "The final floor must never trigger the boss pull.");
+
+            timer.Update(true, floor, false, 120_000);
+            timer.Update(false, floor, false, 149_000);
+            Assert(!timer.CanAttempt(150_000), "Stopping FSD must discard the pending pull.");
+        }
     }
 
     private static void TestPotdSpeedFloorGate()

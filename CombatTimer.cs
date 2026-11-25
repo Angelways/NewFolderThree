@@ -1,3 +1,5 @@
+using DeepDungeon.Fsd.Runtime;
+
 namespace NewFolderThree;
 
 internal sealed class CombatTimer
@@ -39,4 +41,50 @@ internal sealed class CombatTimer
         => IsRunning && RemainingMilliseconds(now) == 0 && now >= nextAttempt;
 
     internal void Attempted(long now) => nextAttempt = now + RetryMilliseconds;
+}
+
+internal sealed class BossPullTimer
+{
+    private const long DelayMilliseconds = 30_000;
+    private const long RetryMilliseconds = 1_000;
+
+    private (uint Dungeon, byte Floor)? floor;
+    private long nextAttempt;
+    private bool handled;
+
+    internal void Update(bool active, in DeepDungeonStateSnapshot duty, bool inCombat, long now)
+    {
+        if (!active || !duty.IsInDeepDungeonTerritory)
+        {
+            floor = null;
+            return;
+        }
+        if (!duty.IsValid || duty.IsTransitioning)
+            return;
+
+        int terminalFloor = duty.DungeonId switch { 1 => 200, 2 or 4 => 100, _ => 0 };
+        if (!duty.IsInDuty || duty.FloorKind != DeepDungeonFloorKind.Boss ||
+            duty.Floor == 0 || duty.Floor >= terminalFloor || duty.Floor % 10 != 0)
+        {
+            floor = null;
+            return;
+        }
+
+        var current = (duty.DungeonId, duty.Floor);
+        if (floor != current)
+        {
+            floor = current;
+            handled = false;
+            nextAttempt = now + DelayMilliseconds;
+        }
+        handled |= inCombat;
+    }
+
+    internal bool CanAttempt(long now) => floor.HasValue && !handled && now >= nextAttempt;
+
+    internal void Attempted(long now, bool dispatched)
+    {
+        handled = dispatched;
+        nextAttempt = now + RetryMilliseconds;
+    }
 }

@@ -10,6 +10,7 @@ public readonly record struct CurrentDutyContinuation(
 {
     public int BlockEndFloor => Math.Min(BlockStartFloor + 9, MaxFloor);
     public bool IsResultFloor => CurrentFloor == MaxFloor;
+    public bool RequiresSaveSlot => BlockEndFloor < MaxFloor;
 }
 
 public static class CurrentDutyContinuationPolicy
@@ -40,28 +41,5 @@ public static class CurrentDutyContinuationPolicy
             currentFloor % 10 == 0 && currentFloor != maxFloor);
         error = string.Empty;
         return true;
-    }
-
-    public static bool TryResolveSave(IReadOnlyList<SaveSlotSnapshot> slots, int nextFloor,
-        int maxFloor, out SaveSlotSnapshot source, out string error)
-    {
-        source = default;
-        if (maxFloor is not (100 or 200) || nextFloor < 1 || nextFloor > maxFloor - 9 || nextFloor % 10 != 1)
-        {
-            error = "接續存檔的預期層段無效。";
-            return false;
-        }
-
-        int matches = 0;
-        foreach (var slot in slots)
-        {
-            if (slot.Empty || slot.StartFloor != nextFloor) continue;
-            source = slot;
-            matches++;
-        }
-        error = matches != 1 ? $"無法唯一識別第 {nextFloor} 層的原存檔；已停止接續，請檢查存檔列表。"
-            : source.Index is not (0 or 1) || !source.Enterable ? "原存檔目前無法入場，已停止接續。"
-            : string.Empty;
-        return error.Length == 0;
     }
 }

@@ -102,7 +102,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
                 () => configuration.PotdMaxAcceleration);
             _potdSpeed = potdSpeed;
             potdActionBlocker = new PotdMachinistActionBlocker(
-                framework, conditions, objectTable, interop, pluginLog);
+                commandManager, conditions, objectTable, interop, pluginLog);
             _potdActionBlocker = potdActionBlocker;
             application = FsdApplication.CreateStandalone(
                 pluginInterface,
@@ -187,8 +187,10 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         bool connected = _reconnect.Update();
         if (connected)
             _application.Update(framework);
+        _potdActionBlocker.Update(_application.Settings.Rotation.Provider, _application.IsRunActive, connected);
         _yAxis.Update(connected ? _application.CurrentDeepDungeonState : default);
-        _combatRecovery.Update(_application.IsRunActive, _application.CanRecoverCombat, connected);
+        _combatRecovery.Update(_application.IsRunActive, _application.CanRecoverCombat,
+            _application.CanStartBossCombat, connected, _application.CurrentDeepDungeonState);
     }
 
     private void OnCommand(string command, string arguments)
@@ -212,8 +214,8 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         _windows.RemoveAllWindows();
         _reconnect.Dispose();
         _combatRecovery.Dispose();
-        _application.Dispose();
         _potdActionBlocker.Dispose();
+        _application.Dispose();
         _potdSpeed.Dispose();
         _yAxis.Dispose();
         ExpansionInterop.Uninitialize();

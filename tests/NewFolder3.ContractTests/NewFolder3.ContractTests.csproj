@@ -14,6 +14,7 @@
     <DalamudLibPath Condition="Exists('$(appdata)\XIVLauncherCN\addon\Hooks\dev\')">$(appdata)\XIVLauncherCN\addon\Hooks\dev\</DalamudLibPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\CombatTimer.cs" Link="CombatTimer.cs" />
     <Compile Include="..\..\YAxisPacketAdjustment.cs" Link="YAxisPacketAdjustment.cs" />
     <Compile Include="..\..\ProductIdentity.cs" Link="ProductIdentity.cs" />
     <ProjectReference Include="..\..\shared\DeepDungeon.Fsd\Core\DeepDungeon.Fsd.Core.csproj" />

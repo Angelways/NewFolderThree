@@ -12,9 +12,12 @@ public static class PotdMachinistActionPolicy
     public const uint PalaceOfTheDeadDungeonId = 1;
 
     public static bool ShouldBlock(
-        uint jobId, uint dungeonId, int floor, uint requestedActionId, uint adjustedActionId)
-    {
-        bool restrictedFloor = dungeonId switch
+        uint jobId, uint dungeonId, int floor, uint requestedActionId, uint adjustedActionId) =>
+        (requestedActionId == BlockedActionId || adjustedActionId == BlockedActionId) &&
+        jobId == MachinistJobId && IsRestrictedFloor(dungeonId, floor);
+
+    public static bool IsRestrictedFloor(uint dungeonId, int floor) =>
+        dungeonId switch
         {
             PalaceOfTheDeadDungeonId =>
                 floor is >= FirstRestrictedFloor and <= PalaceOfTheDeadMaximumFloor && floor % 10 != 0,
@@ -22,8 +25,4 @@ public static class PotdMachinistActionPolicy
                 floor is >= HeavenOnHighFirstRestrictedFloor and < HeavenOnHighMaximumFloor && floor % 10 != 0,
             _ => false
         };
-
-        return (requestedActionId == BlockedActionId || adjustedActionId == BlockedActionId) &&
-               jobId == MachinistJobId && restrictedFloor;
-    }
 }

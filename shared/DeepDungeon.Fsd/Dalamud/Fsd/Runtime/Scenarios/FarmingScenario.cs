@@ -23,7 +23,7 @@ internal sealed class FarmingScenario(FarmingSession session,
     private long _freeSaveSlotStartedAt;
     private bool _creatingSave, _entered, _restDone, _complete, _recoverFailure, _aborted;
     private int _entryFloor;
-    internal bool CanRequestPause => _entered && !_complete &&
+    internal bool CanRequestPause => _entered && !_complete && session.SourceSlot.HasValue &&
         session.Plan is { IsProgression: true, HoldAfterClear: false, StopAfterFloor: null } &&
         _context is { Duty.IsInDuty: true, DutyFailureObserved: false, AttemptAborted: false };
 
@@ -212,16 +212,6 @@ internal sealed class FarmingScenario(FarmingSession session,
             return;
         }
         var decision = FarmingSessionPolicy.Decide(session.Plan, result);
-        bool retainedUnidentifiedTerminalSave = _currentDutyContinuation is not null &&
-            session.OwnedSlot < 0 && decision.DeleteOwnedSave && result.DutyCompleted &&
-            !result.DutyFailed && !result.Aborted;
-        if (retainedUnidentifiedTerminalSave)
-            decision = decision with { DeleteOwnedSave = false };
-        else if (_currentDutyContinuation is not null && session.OwnedSlot < 0 && decision.RecoverFailure)
-        {
-            decision = new(false, session.NextFloor, false, false,
-                "接續區塊未正常通關；沒有可安全驗證的原存檔槽位，FSD 已停止並保留現場。");
-        }
         if (session.PersistPause is { } persistPause)
         {
             if (!result.DutyCompleted || result.DutyFailed || result.Aborted || decision.Error.Length > 0)
@@ -244,25 +234,22 @@ internal sealed class FarmingScenario(FarmingSession session,
         }
         if (decision.DeleteOwnedSave)
         {
-            if (session.OwnedSlot < 0 && _currentDutyContinuation is null)
+            if (session.OwnedSlot < 0)
             {
                 ctx.StatusLine = "無法識別本任務建立的存檔；停止清理。";
                 ctx.StatusIsError = true;
                 _complete = true;
                 return;
             }
-            if (session.OwnedSlot >= 0 && _delete == null)
+            if (_delete == null)
             {
                 _delete = new GenericDeleteSaveFlow(_dungeon,
                     session.OwnedSlot, slots => ValidateOwnedSave(slots));
                 _delete.Prepare(ctx);
             }
-            if (_delete != null)
-            {
-                if (!_delete.Update(framework)) return;
-                if (ctx.StatusIsError) { _complete = true; return; }
-                session.ConfirmOwnedSaveDeleted();
-            }
+            if (!_delete.Update(framework)) return;
+            if (ctx.StatusIsError) { _complete = true; return; }
+            session.ConfirmOwnedSaveDeleted();
         }
         CountsAsCycle = decision.CountCycle;
         _recoverFailure = decision.RecoverFailure;
@@ -272,8 +259,8 @@ internal sealed class FarmingScenario(FarmingSession session,
             FinishPause(ctx, "已完成最終層與收尾，任務已停止。");
             return;
         }
-        if (retainedUnidentifiedTerminalSave)
-            ctx.StatusLine = "終局已完成；未識別原存檔槽位，因此保留存檔。";
+        if (session.Plan.ContinuesExistingProgress && decision.CountCycle)
+            ctx.StatusLine = "終局已完成；已保留原存檔。";
         else if (decision.Error.Length > 0)
         {
             ctx.StatusLine = ctx.AttemptAbortReason + decision.Error + " FSD 已停止。";
@@ -289,14 +276,14 @@ internal sealed class FarmingScenario(FarmingSession session,
 
     private void VerifyPauseSave(RunContext ctx, int nextFloor, Func<SaveSlotSnapshot, string?> persist)
     {
-        if (session.OwnedSlot < 0)
+        if (session.SourceSlot is not { } sourceSlot)
         {
             FinishPause(ctx, "無法辨認本任務的存檔槽位。", error: true);
             return;
         }
         if (_verification == null)
         {
-            session.Source.ConfigureForEntry(false, nextFloor, session.OwnedSlot, session.Plan.MaxFloor);
+            session.Source.ConfigureForEntry(false, nextFloor, sourceSlot, session.Plan.MaxFloor);
             _verification = new(_dungeon, nextFloor, prepared: session.Source, verifyOnly: true);
             _verification.Prepare(ctx);
         }
@@ -318,7 +305,7 @@ internal sealed class FarmingScenario(FarmingSession session,
         ctx.StatusLine = status;
         ctx.StatusIsError = error;
         ctx.RecordDiagnostic?.Invoke(error ? "farming-pause-failed" : "farming-pause-complete",
-            new { floor = _entryFloor, slot = session.OwnedSlot, status });
+            new { floor = _entryFloor, slot = session.SourceSlot, status });
     }
 
     private bool TryEnterDuty(RunContext ctx, IFramework framework)
@@ -392,8 +379,13 @@ internal sealed class FarmingScenario(FarmingSession session,
                 Service.Log.Info($"[Farming] Resumed existing duty: floor={ctx.Duty.Floor}, entryFloor={_entryFloor}, ownedSlot={session.OwnedSlot}, holdOnFailure={session.Plan.HoldOnFailure}");
                 return true;
             }
-            if (session.Plan.SaveUse == SaveUse.Prepared || session.OwnedSlot >= 0 ||
-                session.Plan.ContinuesExistingProgress)
+            if (session.Plan.ContinuesExistingProgress && session.SourceSlot == null)
+            {
+                ctx.StatusLine = "無法辨認原存檔槽位，請由遊戲介面確認存檔。";
+                ctx.StatusIsError = true;
+                return false;
+            }
+            if (session.Plan.SaveUse == SaveUse.Prepared || session.SourceSlot.HasValue)
             {
                 var source = session.PrepareSource();
                 _entry = new(_dungeon, source.ExpectedFloor ?? 0, prepared: source);
