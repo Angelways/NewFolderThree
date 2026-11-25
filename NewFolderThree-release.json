@@ -5,14 +5,14 @@
     "Punchline": "可以挖寶.",
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
-    "Changelog": "合併了上游道具使用優化。\n優化了一些安全功能。",
-    "AssemblyVersion": "0.7.55.27",
+    "Changelog": "增加了中途继续功能，修复了一系列问题",
+    "AssemblyVersion": "0.7.55.28",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Angelways/NewFolderThree",
     "IconUrl": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/icon.png",
-    "LastUpdate": 1795548642,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.27.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.27.zip"
+    "LastUpdate": 1795583357,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.28.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.28.zip"
   }
 ]

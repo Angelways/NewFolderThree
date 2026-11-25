@@ -4,7 +4,7 @@
   <PropertyGroup>
     <AssemblyName>NewFolderThree</AssemblyName>
     <RootNamespace>NewFolderThree</RootNamespace>
-    <Version>0.7.55.27</Version>
+    <Version>0.7.55.28</Version>
     <Description>Standalone Deep Dungeon FSD host.</Description>
     <IsPackable>false</IsPackable>
     <TargetFramework>net10.0-windows</TargetFramework>
