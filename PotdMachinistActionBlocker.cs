@@ -12,6 +12,8 @@ namespace NewFolderThree;
 internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
 {
     private readonly ICommandManager _commands;
+    private readonly IDataManager _data;
+    private readonly IClientState _clientState;
     private readonly ICondition _condition;
     private readonly IObjectTable _objects;
     private readonly IPluginLog _log;
@@ -21,22 +23,26 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
     private volatile uint _dungeonId;
     private volatile int _floor;
     private volatile bool _useNativeBlock;
-    private bool _rsrSuppressed;
-    private long _nextRsrAttempt;
+    private readonly RsrMachinistActionControl _rsrActions;
     private DateTime _lastReadFailureLogAt = DateTime.MinValue;
     private bool _disposed;
 
     public PotdMachinistActionBlocker(
         ICommandManager commands,
+        IDataManager data,
+        IClientState clientState,
         ICondition condition,
         IObjectTable objects,
         IGameInteropProvider interop,
         IPluginLog log)
     {
         _commands = commands;
+        _data = data;
+        _clientState = clientState;
         _condition = condition;
         _objects = objects;
         _log = log;
+        _rsrActions = new(SetRsrActionEnabled);
 
         try
         {
@@ -61,39 +67,45 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
         ReadFloor();
 
         // RSR resolves the name against its current job's actions.
-        if (!connected || _objects.LocalPlayer?.ClassJob.RowId != PotdMachinistActionPolicy.MachinistJobId)
+        if (!connected || _clientState.IsPvP ||
+            _objects.LocalPlayer?.ClassJob.RowId != PotdMachinistActionPolicy.MachinistJobId)
             return;
-        bool suppress = useRsr && runActive && _jobId == PotdMachinistActionPolicy.MachinistJobId &&
-            PotdMachinistActionPolicy.IsRestrictedFloor(_dungeonId, _floor);
-        if (suppress == _rsrSuppressed)
-        {
-            _nextRsrAttempt = 0;
-            return;
-        }
 
-        long now = Environment.TickCount64;
-        if (now < _nextRsrAttempt) return;
-        _nextRsrAttempt = now + 2000;
-        SetRsrSuppression(suppress);
+        bool running = useRsr && runActive;
+        uint spreadShot = 0;
+        if (running)
+        {
+            var manager = ActionManager.Instance();
+            if (manager != null)
+            {
+                uint adjusted = manager->GetAdjustedActionId(RsrMachinistActionControl.SpreadShot);
+                if (adjusted is RsrMachinistActionControl.SpreadShot or RsrMachinistActionControl.Scattergun)
+                    spreadShot = adjusted;
+            }
+        }
+        _rsrActions.Update(running, spreadShot,
+            PotdMachinistActionPolicy.IsRestrictedFloor(_dungeonId, _floor), Environment.TickCount64);
     }
 
-    private void SetRsrSuppression(bool suppress)
+    private bool SetRsrActionEnabled(uint actionId, bool enabled)
     {
-        var command = suppress ? "/rsr ToggleActions 弹射 false" : "/rsr ToggleActions 弹射 true";
         try
         {
-            if (_commands.Commands.ContainsKey("/rsr") && _commands.ProcessCommand(command))
+            var action = _data.GetExcelSheet<Lumina.Excel.Sheets.Action>()?.GetRowOrDefault(actionId);
+            if (action is { } row && _commands.Commands.ContainsKey("/rsr"))
             {
-                _rsrSuppressed = suppress;
-                _nextRsrAttempt = 0;
-                return;
+                var name = row.Name.ExtractText();
+                if (!string.IsNullOrWhiteSpace(name) &&
+                    _commands.ProcessCommand($"/rsr ToggleActions {name} {(enabled ? "true" : "false")}"))
+                    return true;
             }
-            _log.Warning("無法送出 RSR 彈射指令：{Command}", command);
+            _log.Warning("無法送出 RSR 技能切換指令，技能 {ActionId}，啟用 {Enabled}。", actionId, enabled);
         }
         catch (Exception ex)
         {
-            _log.Warning(ex, "無法送出 RSR 彈射指令：{Command}", command);
+            _log.Warning(ex, "無法送出 RSR 技能切換指令，技能 {ActionId}，啟用 {Enabled}。", actionId, enabled);
         }
+        return false;
     }
 
     private void ReadFloor()
@@ -185,8 +197,8 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
     {
         if (_disposed)
             return;
-        if (_rsrSuppressed)
-            SetRsrSuppression(false);
+        if (!_clientState.IsPvP)
+            _rsrActions.Restore(Environment.TickCount64);
         _useNativeBlock = false;
         _jobId = 0;
         _dungeonId = 0;

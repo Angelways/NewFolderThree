@@ -20,6 +20,7 @@ internal static class Program
         passed += Run("current-duty-continuation-floor-routing", TestCurrentDutyContinuationFloorRouting);
         passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
+        passed += Run("rsr-machinist-action-control", TestRsrMachinistActionControl);
         passed += Run("boss-pull-on-idle-tenth-floor", TestBossPullTimer);
         Console.WriteLine($"NewFolderThree contract tests: {passed} passed");
         return 0;
@@ -240,6 +241,48 @@ internal static class Program
                !policy(31, 2, 100, 2890, 2890) &&
                !policy(24, 2, 91, 2890, 2890),
             "The Heaven-on-High block must exclude boundary floors and other jobs.");
+    }
+
+    private static void TestRsrMachinistActionControl()
+    {
+        const uint spread = RsrMachinistActionControl.SpreadShot;
+        const uint scattergun = RsrMachinistActionControl.Scattergun;
+        const uint crossbow = RsrMachinistActionControl.AutoCrossbow;
+        const uint bioblaster = RsrMachinistActionControl.Bioblaster;
+        const uint ricochet = PotdMachinistActionPolicy.BlockedActionId;
+        var commands = new List<(uint Action, bool Enabled)>();
+        bool crossbowAvailable = false;
+        var actions = new RsrMachinistActionControl((action, enabled) =>
+        {
+            commands.Add((action, enabled));
+            return action != crossbow || crossbowAvailable;
+        });
+
+        actions.Update(true, spread, false, 100);
+        Assert(commands.SequenceEqual([(spread, false), (crossbow, false), (bioblaster, false)]),
+            "An RSR run should disable the level-appropriate shot and both other AoE actions on any floor.");
+        commands.Clear();
+        actions.Update(true, 0, false, 500);
+        Assert(commands.Count == 0, "An unavailable adjusted action must preserve the current selection.");
+
+        crossbowAvailable = true;
+        actions.Update(true, scattergun, true, 2100);
+        Assert(commands.SequenceEqual([(spread, true), (scattergun, false), (crossbow, false), (ricochet, false)]),
+            "Level sync must switch the suppressed shot, failed commands must retry independently, and Ricochet must follow its floor rule.");
+        commands.Clear();
+        actions.Update(true, scattergun, false, 2200);
+        Assert(commands.SequenceEqual([(ricochet, true)]), "Leaving the restricted floor must restore only Ricochet.");
+
+        commands.Clear();
+        crossbowAvailable = false;
+        actions.Update(false, 0, false, 2300);
+        Assert(commands.SequenceEqual([(scattergun, true), (crossbow, true), (bioblaster, true)]),
+            "Stopping FSD or switching providers must restore every currently suppressed skill.");
+        commands.Clear();
+        crossbowAvailable = true;
+        actions.Restore(2400);
+        Assert(commands.SequenceEqual([(crossbow, true)]),
+            "Unloading must retry outstanding restoration and leave skills that were already restored alone.");
     }
 
     private static void TestDetailedMapHostOptionsNoService()

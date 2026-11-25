@@ -102,7 +102,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
                 () => configuration.PotdMaxAcceleration);
             _potdSpeed = potdSpeed;
             potdActionBlocker = new PotdMachinistActionBlocker(
-                commandManager, conditions, objectTable, interop, pluginLog);
+                commandManager, gameData, clientState, conditions, objectTable, interop, pluginLog);
             _potdActionBlocker = potdActionBlocker;
             application = FsdApplication.CreateStandalone(
                 pluginInterface,

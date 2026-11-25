@@ -6,13 +6,13 @@
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
     "Changelog": "增加了中途继续功能，修复了一系列问题",
-    "AssemblyVersion": "0.7.55.28",
+    "AssemblyVersion": "0.7.55.29",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Angelways/NewFolderThree",
     "IconUrl": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/icon.png",
-    "LastUpdate": 1795583357,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.28.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.28.zip"
+    "LastUpdate": 1795589888,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.29.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.29.zip"
   }
 ]

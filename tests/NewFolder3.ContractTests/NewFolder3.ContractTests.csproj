@@ -15,6 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\CombatTimer.cs" Link="CombatTimer.cs" />
+    <Compile Include="..\..\RsrMachinistActionControl.cs" Link="RsrMachinistActionControl.cs" />
     <Compile Include="..\..\YAxisPacketAdjustment.cs" Link="YAxisPacketAdjustment.cs" />
     <Compile Include="..\..\ProductIdentity.cs" Link="ProductIdentity.cs" />
     <ProjectReference Include="..\..\shared\DeepDungeon.Fsd\Core\DeepDungeon.Fsd.Core.csproj" />
