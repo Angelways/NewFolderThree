@@ -2,7 +2,7 @@ using DeepDungeon.Fsd.Core;
 
 namespace DeepDungeon.Fsd.Runtime;
 
-internal sealed class FarmingSession(FarmingPlan plan, int ownedSlot = -1)
+internal sealed class FarmingSession(FarmingPlan plan, int ownedSlot = -1, int? continuationSlot = null)
 {
     public FarmingPlan Plan { get; } = plan;
     public PreparedSaveBinding Source { get; private set; } = new(maxFloor: plan.MaxFloor);
@@ -12,6 +12,7 @@ internal sealed class FarmingSession(FarmingPlan plan, int ownedSlot = -1)
     public bool OpenBronze { get; private set; } = plan.OpenBronze;
     public int NextFloor { get; private set; } = plan.StartFloor;
     public int OwnedSlot { get; private set; } = ownedSlot;
+    public int? SourceSlot => OwnedSlot >= 0 ? OwnedSlot : continuationSlot;
     public int Failures { get; private set; }
     public int Discoveries { get; private set; }
     public Func<SaveSlotSnapshot, string?>? PersistPause { get; set; }
@@ -53,8 +54,16 @@ internal sealed class FarmingSession(FarmingPlan plan, int ownedSlot = -1)
     public PreparedSaveBinding PrepareSource()
     {
         Source.ConfigureForEntry(Plan.ReusesSave, Plan.SaveUse == SaveUse.Prepared ? null : NextFloor,
-            OwnedSlot >= 0 ? OwnedSlot : null, Plan.MaxFloor);
+            SourceSlot, Plan.MaxFloor);
         return Source;
+    }
+
+    public bool BindContinuationSave()
+    {
+        if (Source.Pinned is not { Index: 0 or 1 } source || SourceSlot != source.Index)
+            return false;
+        OwnedSlot = source.Index;
+        return true;
     }
 
     public bool BindCreatedSave(int slot)

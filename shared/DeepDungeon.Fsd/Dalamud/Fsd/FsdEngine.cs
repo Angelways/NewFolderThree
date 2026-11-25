@@ -290,6 +290,8 @@ namespace DeepDungeon.Fsd.Dalamud
             _currentDeepDungeonState is { IsValid: true, IsInDuty: true, IsTransitioning: false } &&
             _ddHost?.Context is { EntryReadyForDuty: true, StatusIsError: false } &&
             _rotationControl.DesiredEnabled;
+        internal bool CanStartBossCombat => CanRecoverCombat && _ddHost?.Context is
+            { DutyCompletionObserved: false, DutyFailureObserved: false, AttemptAborted: false, TerminalReviewRequested: false };
 
         internal void SuspendForReconnect()
         {

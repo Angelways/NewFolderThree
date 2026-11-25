@@ -108,7 +108,9 @@ internal partial class FsdEngine
         ImGui.Text("FSD 選項");
         ImGui.Indent();
         bool running = _ddHost?.FsdActive == true;
-        var mode = _configuration.Farming.GetMode(_configuration.Farming.DungeonId);
+        var activePlan = running ? _ddHost?.Context?.FarmingPlan : null;
+        var mode = activePlan?.Mode ?? _configuration.Farming.GetMode(_configuration.Farming.DungeonId);
+        bool continuing = activePlan?.ContinuesExistingProgress == true;
         var preferences = _configuration.Farming.GetPreferences(_configuration, mode);
         var options = running ? _ddHost?.RunOptionsProvider?.Current : null;
         bool hoard = options?.BandedEnabled ?? (preferences.BandedEnabled == true);
@@ -143,10 +145,13 @@ internal partial class FsdEngine
         ImGui.EndDisabled();
         if (changed)
         {
-            preferences.BandedEnabled = hoard;
-            preferences.OpenGold = gold; preferences.OpenSilver = silver; preferences.OpenBronze = bronze;
+            if (!continuing)
+            {
+                preferences.BandedEnabled = hoard;
+                preferences.OpenGold = gold; preferences.OpenSilver = silver; preferences.OpenBronze = bronze;
+                _configuration.Save();
+            }
             _ddHost?.SetFarmingTargets(hoard, gold, silver, bronze);
-            _configuration.Save();
             _farmingError = null;
         }
         ImGui.BeginDisabled(mode == FarmingMode.HoardDiscovery);
@@ -168,7 +173,9 @@ internal partial class FsdEngine
         }
         ImGui.EndDisabled();
         ImGui.Spacing();
+        ImGui.BeginDisabled(continuing);
         DrawCycleOptions(preferences);
+        ImGui.EndDisabled();
         ImGui.EndDisabled();
         if (running)
         {

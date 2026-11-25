@@ -131,6 +131,7 @@ public sealed partial class FsdApplication : IFsdApplication
     public FsdSettings Settings => _settings;
     public bool IsRunActive => _module.IsRunActive;
     public bool CanRecoverCombat => _module.CanRecoverCombat;
+    public bool CanStartBossCombat => _module.CanStartBossCombat;
     public string? ActiveDetailedMapReleaseId =>
         _module.ActiveDetailedMapReleaseId;
     public DeepDungeonStateSnapshot CurrentDeepDungeonState => _module.CurrentDeepDungeonState;

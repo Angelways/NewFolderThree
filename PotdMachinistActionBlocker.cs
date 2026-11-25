@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using DeepDungeon.Fsd.Core;
+using DeepDungeon.Fsd.Runtime;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
 
@@ -10,7 +11,7 @@ namespace NewFolderThree;
 
 internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
 {
-    private readonly IFramework _framework;
+    private readonly ICommandManager _commands;
     private readonly ICondition _condition;
     private readonly IObjectTable _objects;
     private readonly IPluginLog _log;
@@ -19,17 +20,20 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
     private volatile uint _jobId;
     private volatile uint _dungeonId;
     private volatile int _floor;
+    private volatile bool _useNativeBlock;
+    private bool _rsrSuppressed;
+    private long _nextRsrAttempt;
     private DateTime _lastReadFailureLogAt = DateTime.MinValue;
     private bool _disposed;
 
     public PotdMachinistActionBlocker(
-        IFramework framework,
+        ICommandManager commands,
         ICondition condition,
         IObjectTable objects,
         IGameInteropProvider interop,
         IPluginLog log)
     {
-        _framework = framework;
+        _commands = commands;
         _condition = condition;
         _objects = objects;
         _log = log;
@@ -42,7 +46,6 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
                 (nint)ActionManager.MemberFunctionPointers.UseActionLocation, UseLocation);
             _use.Enable();
             _useLocation.Enable();
-            _framework.Update += Update;
         }
         catch (Exception ex)
         {
@@ -51,7 +54,49 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
         }
     }
 
-    private void Update(IFramework _)
+    public void Update(FsdRotationProvider provider, bool runActive, bool connected)
+    {
+        bool useRsr = provider == FsdRotationProvider.RotationSolverReborn;
+        _useNativeBlock = !useRsr;
+        ReadFloor();
+
+        // RSR resolves the name against its current job's actions.
+        if (!connected || _objects.LocalPlayer?.ClassJob.RowId != PotdMachinistActionPolicy.MachinistJobId)
+            return;
+        bool suppress = useRsr && runActive && _jobId == PotdMachinistActionPolicy.MachinistJobId &&
+            PotdMachinistActionPolicy.IsRestrictedFloor(_dungeonId, _floor);
+        if (suppress == _rsrSuppressed)
+        {
+            _nextRsrAttempt = 0;
+            return;
+        }
+
+        long now = Environment.TickCount64;
+        if (now < _nextRsrAttempt) return;
+        _nextRsrAttempt = now + 2000;
+        SetRsrSuppression(suppress);
+    }
+
+    private void SetRsrSuppression(bool suppress)
+    {
+        var command = suppress ? "/rsr ToggleActions 弹射 false" : "/rsr ToggleActions 弹射 true";
+        try
+        {
+            if (_commands.Commands.ContainsKey("/rsr") && _commands.ProcessCommand(command))
+            {
+                _rsrSuppressed = suppress;
+                _nextRsrAttempt = 0;
+                return;
+            }
+            _log.Warning("無法送出 RSR 彈射指令：{Command}", command);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(ex, "無法送出 RSR 彈射指令：{Command}", command);
+        }
+    }
+
+    private void ReadFloor()
     {
         uint jobId = _objects.LocalPlayer?.ClassJob.RowId ?? 0;
         if (jobId != PotdMachinistActionPolicy.MachinistJobId ||
@@ -114,7 +159,7 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
 
     private bool ShouldBlock(ActionManager* self, ActionType type, uint id)
     {
-        if (type != ActionType.Action)
+        if (!_useNativeBlock || type != ActionType.Action)
             return false;
 
         uint adjustedId = id;
@@ -140,7 +185,9 @@ internal sealed unsafe class PotdMachinistActionBlocker : IDisposable
     {
         if (_disposed)
             return;
-        _framework.Update -= Update;
+        if (_rsrSuppressed)
+            SetRsrSuppression(false);
+        _useNativeBlock = false;
         _jobId = 0;
         _dungeonId = 0;
         _floor = 0;

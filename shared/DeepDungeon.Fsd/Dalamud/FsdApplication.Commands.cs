@@ -35,7 +35,7 @@ public sealed partial class FsdApplication
                             "/cc fsd status",
                             "/cc fsd los [y=<absolute world Y> | yOffset=<offset from normal ray origin>] (current target)",
                             "/cc fsd los hover=true|false (live sight and player cast-start log)",
-                            "/cc fsd start [stopAfterFloor=10..200] [startFloor=1..191] [resumeSlot=0|1] [holdOnFailure=true|false] [holdAfterClear=true|false]",
+                            "/cc fsd start",
                             "/cc fsd terrain-capture output=<directory> | enabled=false",
                             "/cc fsd terrain-export",
                             "/cc fsd stop",
@@ -44,8 +44,7 @@ public sealed partial class FsdApplication
                             "/cc fsd leave confirm=leave-deep-dungeon",
                             "/cc fsd delete-save slotNumber=1|2 confirm=delete-pt-save-slot",
                             "/cc fsd start-pt startFloor=21|31 confirm=start-pt-fsd [targetLoops=1..] [infinite=true|false] [leaveMode=default|finish|hoard|immediate|boss|minutes]",
-                        },
-                        diagnosticFloors = "stopAfterFloor must be a ten-floor boundary; startFloor must begin a ten-floor group. Existing start/save guards apply."
+                        }
                     };
                     break;
                 case "status":
@@ -53,7 +52,14 @@ public sealed partial class FsdApplication
                     result = Snapshot();
                     break;
                 case "start":
-                    result = HandleStartCommand(args);
+                    if (args.Length > 1)
+                    {
+                        const string error = "如果需要繼續存檔功能，請移步『目前可以自動繼續的存檔』標籤頁。";
+                        Service.Chat.PrintError(error);
+                        result = new { ok = false, error };
+                    }
+                    else
+                        result = Start();
                     break;
                 case "reroll-pt":
                 case "map-check":
@@ -168,21 +174,6 @@ public sealed partial class FsdApplication
                 exception = error is ArgumentException ? null : error.ToString()
             });
         }
-    }
-
-    private object HandleStartCommand(string[] args)
-    {
-        var options = ReadCommandOptions(args, null, "stopAfterFloor", "startFloor", "resumeSlot", "holdOnFailure", "holdAfterClear");
-        int? stopAfterFloor = ReadOptionalCommandInt(options, "stopAfterFloor", 10, 200);
-        if (stopAfterFloor.HasValue && stopAfterFloor.Value % 10 != 0)
-            throw new ArgumentException("stopAfterFloor must be a ten-floor boundary between 10 and 200.");
-        int? startFloor = ReadOptionalCommandInt(options, "startFloor", 1, 191);
-        if (startFloor.HasValue && startFloor.Value % 10 != 1)
-            throw new ArgumentException("startFloor must begin a ten-floor group between 1 and 191.");
-        int? resumeSlot = ReadOptionalCommandInt(options, "resumeSlot", 0, 1);
-        bool holdOnFailure = ReadOptionalCommandBool(options, "holdOnFailure") ?? false;
-        return Start(new FsdStartRequest(stopAfterFloor, startFloor, resumeSlot, holdOnFailure)
-        { HoldAfterClear = ReadOptionalCommandBool(options, "holdAfterClear") ?? false });
     }
 
     private static Dictionary<string, string> ReadCommandOptions(string[] args, string? positionalName,

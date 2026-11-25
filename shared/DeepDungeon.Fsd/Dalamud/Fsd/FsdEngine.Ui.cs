@@ -371,6 +371,8 @@ namespace DeepDungeon.Fsd.Dalamud
 							Service.Log.Error($"[FsdEngine] Run-log export failed: {ex}");
 						}
 					}
+					ImGui.SameLine();
+					DrawCurrentDutyContinuation(!fsdRunning && inDD);
                     if (liveMaps != null)
                     {
                         ImGui.SameLine();
