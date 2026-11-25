@@ -62,9 +62,7 @@ internal sealed class BossPullTimer
         if (!duty.IsValid || duty.IsTransitioning)
             return;
 
-        int terminalFloor = duty.DungeonId switch { 1 => 200, 2 or 4 => 100, _ => 0 };
-        if (!duty.IsInDuty || duty.FloorKind != DeepDungeonFloorKind.Boss ||
-            duty.Floor == 0 || duty.Floor >= terminalFloor || duty.Floor % 10 != 0)
+        if (!duty.IsInDuty || duty.DungeonId is not (1 or 2 or 4) || duty.FloorKind != DeepDungeonFloorKind.Boss)
         {
             floor = null;
             return;

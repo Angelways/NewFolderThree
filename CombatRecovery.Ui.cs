@@ -8,7 +8,7 @@ internal sealed partial class CombatRecovery
     public void Draw()
     {
         ImGui.TextWrapped("此功能會在戰鬥中監測角色是否施放 GCD 技能。若有一段時間未施放，會自動施放一次 GCD 技能，嘗試恢復自動循環（僅限機工士）。");
-        ImGui.TextWrapped("FSD 在非最終的十層首領樓層等待 30 秒仍未開戰時，機工士會對最近可攻擊的敵人使用一次分裂彈。");
+        ImGui.TextWrapped("FSD 在首領樓層（含神聖路 99 層）等待 30 秒仍未開戰時，機工士會對最近可攻擊的敵人使用一次分裂彈或熱分裂彈。");
         ImGui.Spacing();
         if (ImGui.Button(monitoringEnabled ? "停止監測" : "啟動監測"))
             monitoringEnabled = !monitoringEnabled;

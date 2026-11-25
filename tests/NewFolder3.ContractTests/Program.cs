@@ -22,7 +22,7 @@ internal static class Program
         passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
         passed += Run("rsr-machinist-action-control", TestRsrMachinistActionControl);
-        passed += Run("boss-pull-on-idle-tenth-floor", TestBossPullTimer);
+        passed += Run("boss-pull-on-idle-boss-floor", TestBossPullTimer);
         passed += Run("stable-passage-room-routing", TestStablePassageRoomRouting);
         Console.WriteLine($"NewFolderThree contract tests: {passed} passed");
         return 0;
@@ -177,27 +177,39 @@ internal static class Program
     private static void TestBossPullTimer()
     {
         var timer = new BossPullTimer();
-        foreach (var (dungeon, terminal) in new (uint, byte)[] { (1, 200), (2, 100), (4, 100) })
+        foreach (var (dungeon, boss, terminal) in new (uint, byte, byte)[] { (1, 10, 200), (2, 10, 100), (4, 10, 100), (4, 99, 100) })
         {
-            var floor = new DeepDungeonStateSnapshot(true, true, true, dungeon, 10, DeepDungeonFloorKind.Boss, false, 0);
+            DeepDungeonStateSnapshot AtFloor(byte number) => new(
+                true, true, true, dungeon, number, DeepDungeonFloorClassifier.Classify(dungeon, number), false, 0);
+
+            var floor = AtFloor(boss);
             timer.Update(true, floor, false, 0);
-            Assert(!timer.CanAttempt(29_999) && timer.CanAttempt(30_000), "Boss pull must wait 30 seconds.");
+            Assert(!timer.CanAttempt(29_999) && timer.CanAttempt(30_000),
+                $"Boss pull must wait 30 seconds on floor {boss} of dungeon {dungeon}.");
             timer.Attempted(30_000, dispatched: false);
             Assert(!timer.CanAttempt(30_999) && timer.CanAttempt(31_000), "An unavailable target may be retried.");
             timer.Attempted(31_000, dispatched: true);
             Assert(!timer.CanAttempt(60_000), "A dispatched boss pull must not be repeated on the same floor.");
 
-            var next = floor with { Floor = 20 };
-            timer.Update(true, next, false, 60_000);
-            timer.Update(true, next, true, 70_000);
-            timer.Update(true, next, false, 80_000);
+            timer.Update(true, AtFloor(20), false, 60_000);
+            timer.Update(true, floor, false, 60_000);
+            timer.Update(true, floor, true, 70_000);
+            timer.Update(true, floor, false, 80_000);
             Assert(!timer.CanAttempt(90_000), "Natural combat must cancel the pull for that floor.");
-            timer.Update(true, floor with { Floor = terminal }, false, 90_000);
+            timer.Update(true, AtFloor(terminal), false, 90_000);
             Assert(!timer.CanAttempt(120_000), "The final floor must never trigger the boss pull.");
 
             timer.Update(true, floor, false, 120_000);
             timer.Update(false, floor, false, 149_000);
             Assert(!timer.CanAttempt(150_000), "Stopping FSD must discard the pending pull.");
+        }
+
+        foreach (uint dungeon in new uint[] { 1, 2, 3 })
+        {
+            var floor = new DeepDungeonStateSnapshot(true, true, true, dungeon, 99,
+                DeepDungeonFloorClassifier.Classify(dungeon, 99), false, 0);
+            timer.Update(true, floor, false, 150_000);
+            Assert(!timer.CanAttempt(180_000), $"Dungeon {dungeon} must not trigger a pull on floor 99.");
         }
     }
 
