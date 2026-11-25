@@ -25,6 +25,8 @@ public static class FarmingSessionPolicy
         {
             if (plan.ContinuesExistingProgress)
                 return new(false, result.EntryFloor, false, false, "接續攻略失敗；已停止並保留原存檔。");
+            if (plan.Mode == FarmingMode.NormalSummit && !plan.RestartSummitAfterFailure)
+                return new(false, result.EntryFloor, false, false, "攻略失敗；已停用失敗後重新開始。");
             return plan.IsProgression
                 ? new(false, plan.StartFloor, true, true, string.Empty)
                 : new(false, plan.StartFloor, ownsSave, false, "本次攻略失敗，未計完成次數。");

@@ -67,8 +67,10 @@ internal sealed class DungeonExitController(bool returnToEntrance, uint entrance
         var exit = ctx.Duty.IsInDuty ? FindResultExit(ctx) : FindNearestRestExit();
         bool atEntrance = IsAtEntrance();
         var ui = ReadUi(ctx.Duty.IsInDuty);
+        bool deadSummitRetry = ctx.FarmingPlan is { Mode: FarmingMode.NormalSummit, RestartSummitAfterFailure: true } &&
+            ctx.DutyFailureObserved && Service.LocalPlayer is { IsDead: true };
         var facts = new ExitFacts(false, ctx.Duty.IsInDuty, atEntrance, !ctx.Duty.IsInDuty && exit != null,
-            Service.Condition[global::Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat], ui.Kind,
+            !deadSummitRetry && Service.Condition[global::Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat], ui.Kind,
             ctx.Duty.IsInDuty && exit != null);
         var action = ExitUiPolicy.Decide(facts, returnToEntrance);
         string scope = $"{Service.ClientState.TerritoryType}:{facts.InDuty}";

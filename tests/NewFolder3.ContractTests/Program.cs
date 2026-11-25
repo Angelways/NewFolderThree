@@ -18,6 +18,7 @@ internal static class Program
         passed += Run("local-manifest-identity", TestLocalManifestIdentity);
         passed += Run("full-save-replacement", TestFullSaveReplacement);
         passed += Run("normal-summit-progression", TestNormalSummitProgression);
+        passed += Run("normal-summit-retry-timing", TestSummitRetryTiming);
         passed += Run("current-duty-continuation-floor-routing", TestCurrentDutyContinuationFloorRouting);
         passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
@@ -50,12 +51,18 @@ internal static class Program
 
     private static void TestFullSaveReplacement()
     {
-        Assert(!new FarmingSettings().AutoDeleteSaveWhenFull,
-            "Fresh and legacy settings must leave save replacement off.");
+        var settings = JsonSerializer.Deserialize<FarmingSettings>("{}")!;
+        Assert(!settings.AutoDeleteSaveWhenFull && settings.FullSaveDeletionSlot == 1,
+            "Legacy settings must leave save replacement off and default to the second slot.");
         var first = new SaveSlotSnapshot(0, false, 11, "11", "first") { RowFingerprint = "row-1" };
         var second = new SaveSlotSnapshot(1, false, 31, "31", "second") { RowFingerprint = "row-2" };
         Assert(SaveSlotReplacementPolicy.FindCandidate([first, second]) == second,
-            "A full list must select only the second slot.");
+            "A full list must select the second slot by default.");
+        Assert(SaveSlotReplacementPolicy.FindCandidate([first, second], 0) == first,
+            "A full list must select the first slot when configured.");
+        Assert(SaveSlotReplacementPolicy.IsStillEligible([first, second], first) &&
+               !SaveSlotReplacementPolicy.IsStillEligible([first with { RowFingerprint = "changed" }, second], first),
+            "Revalidation must use the fingerprint of the selected first slot.");
         Assert(SaveSlotReplacementPolicy.IsStillEligible([first, second with { Enterable = false }], second),
             "The reset list may change enterability of the same save.");
         Assert(!SaveSlotReplacementPolicy.IsStillEligible([first with { Empty = true }, second], second),
@@ -64,6 +71,9 @@ internal static class Program
             "A changed save must prevent deletion.");
         Assert(SaveSlotReplacementPolicy.FindCandidate([first, second with { RowFingerprint = null }]) == null,
             "Replacement must require a readable save fingerprint.");
+        Assert(SaveSlotReplacementPolicy.FindCandidate([first with { RowFingerprint = null }, second], 0) == null &&
+               SaveSlotReplacementPolicy.FindCandidate([first, second], 2) == null,
+            "Replacement must neither fall back to another slot nor accept an invalid selection.");
     }
 
     private static void TestNormalSummitProgression()
@@ -92,6 +102,10 @@ internal static class Program
             var retry = FarmingSessionPolicy.Decide(plan!, new(first + 10, false, true, false, false));
             Assert(retry is { CountCycle: false, DeleteOwnedSave: true, RecoverFailure: true } && retry.NextFloor == first,
                 "A retry must return to the configured summit start.");
+            var noRetry = FarmingSessionPolicy.Decide(plan! with { RestartSummitAfterFailure = false },
+                new(first, false, true, false, false));
+            Assert(noRetry is { CountCycle: false, DeleteOwnedSave: false, RecoverFailure: false } && noRetry.Error.Length > 0,
+                "Disabling summit retry must stop on failure and preserve the save.");
 
             var attachedPlan = plan! with { ContinuesExistingProgress = true };
             var interrupted = FarmingSessionPolicy.Decide(attachedPlan,
@@ -106,6 +120,25 @@ internal static class Program
             Assert(completedAttached.CountCycle && !completedAttached.DeleteOwnedSave,
                 "Completed current-duty continuation must preserve its source save.");
         }
+    }
+
+    private static void TestSummitRetryTiming()
+    {
+        Assert(JsonSerializer.Deserialize<FarmingSettings>("{}")!.RestartSummitAfterFailure,
+            "Existing settings must enable summit retry by default.");
+        var timing = new SummitRetryTiming();
+        Assert(!timing.ObserveDeath(true, 0) && !timing.ObserveDeath(true, 29_999),
+            "A death shorter than 30 seconds must not trigger an exit.");
+        Assert(!timing.ObserveDeath(false, 29_999) && !timing.ObserveDeath(true, 31_000) &&
+               !timing.ObserveDeath(true, 60_999) && timing.ObserveDeath(true, 61_000),
+            "Revival must reset the death timer, which expires at 30 continuous seconds.");
+        Assert(!timing.ObserveMovementReady(true, 70_000) && !timing.ObserveMovementReady(true, 70_499) &&
+               !timing.ObserveMovementReady(false, 70_499) && !timing.ObserveMovementReady(true, 71_000) &&
+               !timing.ObserveMovementReady(true, 71_499) && timing.ObserveMovementReady(true, 71_500),
+            "Restart must wait for 500 consecutive milliseconds of movement readiness.");
+        timing.Reset();
+        Assert(!timing.ObserveDeath(true, 100_000) && !timing.ObserveMovementReady(true, 100_000),
+            "Suspension must discard time from before the observation gap.");
     }
 
     private static void TestCurrentDutyContinuationFloorRouting()

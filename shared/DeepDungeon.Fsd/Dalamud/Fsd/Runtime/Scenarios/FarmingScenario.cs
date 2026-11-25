@@ -1,7 +1,11 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using DeepDungeon.Fsd.Core;
 using DeepDungeon.Fsd.Dalamud.GameState;
 using DeepDungeon.Fsd.Dalamud.Runtime.Entry;
+using DeepDungeon.Fsd.Dalamud.Utilities;
+using FFXIVClientStructs.Expansion.FFXIV.Client.Game.Control;
+using OmenTools.Extensions;
 
 namespace DeepDungeon.Fsd.Dalamud.Runtime.Scenarios;
 
@@ -10,6 +14,7 @@ internal sealed class FarmingScenario(FarmingSession session,
     CurrentDutyContinuation? currentDutyContinuation = null) : IScenario
 {
     private readonly CurrentDutyContinuation? _currentDutyContinuation = currentDutyContinuation;
+    private readonly SummitRetryTiming _summitRetryTiming = new();
     private readonly DungeonData _dungeon = DungeonCatalog.TryGetByDungeonId(session.Plan.DungeonId, out var d)
         ? d
         : DungeonCatalog.PilgrimsTraverse;
@@ -22,6 +27,7 @@ internal sealed class FarmingScenario(FarmingSession session,
     private GenericDeleteSaveFlow? _freeSaveSlot;
     private long _freeSaveSlotStartedAt;
     private bool _creatingSave, _entered, _restDone, _complete, _recoverFailure, _aborted;
+    private bool _retryMovementReady;
     private int _entryFloor;
     internal bool CanRequestPause => _entered && !_complete && session.SourceSlot.HasValue &&
         session.Plan is { IsProgression: true, HoldAfterClear: false, StopAfterFloor: null } &&
@@ -47,9 +53,12 @@ internal sealed class FarmingScenario(FarmingSession session,
 
     internal void SuspendForReconnect()
     {
+        ResetSummitRetryTiming();
         _entranceTravel?.Dispose();
         _entranceTravel = null;
     }
+
+    internal void ResetSummitRetryTiming() => _summitRetryTiming.Reset();
 
     // Re-entry keeps the session and verifies the previous save before acting.
     internal bool NeedsReentryAfterReconnect(out string? error)
@@ -138,8 +147,20 @@ internal sealed class FarmingScenario(FarmingSession session,
             return;
         }
         if (!_entered && !TryEnterDuty(ctx, framework)) return;
-        if (ctx.Duty.StateReadFailed || ctx.Duty.IsTransitioning || DutyState.IsClientTransitioning) return;
+        if (ctx.Duty.StateReadFailed || ctx.Duty.IsTransitioning || DutyState.IsClientTransitioning)
+        {
+            ResetSummitRetryTiming();
+            return;
+        }
         ObserveDutyCompletion(ctx);
+        bool normalSummit = session.Plan.Mode == FarmingMode.NormalSummit;
+        if (normalSummit && ctx.DutyFailureObserved && !session.Plan.RestartSummitAfterFailure)
+        {
+            ctx.StatusLine = "攻略失敗；已停用失敗後重新開始。";
+            ctx.StatusIsError = true;
+            _complete = true;
+            return;
+        }
         if (session.Plan.HoldAfterClear && ctx.DutyCompletionObserved &&
             !ctx.DutyFailureObserved && !ctx.TerminalRewardsRequired)
         {
@@ -159,6 +180,24 @@ internal sealed class FarmingScenario(FarmingSession session,
                 if (ctx.TryHoldFailedAttempt(ctx.AttemptAbortReason)) return;
                 RequestLeave();
                 return;
+            }
+            if (normalSummit && session.Plan.RestartSummitAfterFailure && !session.Plan.HoldOnFailure &&
+                !session.Plan.ContinuesExistingProgress && !ctx.DutyCompletionObserved && !_recoverFailure)
+            {
+                var player = Service.LocalPlayer;
+                if (_summitRetryTiming.ObserveDeath(player?.IsDead == true, Environment.TickCount64))
+                {
+                    if (!ctx.DutyFailureObserved)
+                    {
+                        ctx.MarkDutyFailed();
+                        ctx.RecordDiagnostic?.Invoke("summit-death-timeout", new { floor = ctx.Duty.Floor, dungeonId = _dungeon.DungeonId });
+                    }
+                }
+                else if (player is not { IsDead: false })
+                {
+                    ctx.StatusLine = "等待角色復活；持續倒下 30 秒後將退本。";
+                    return;
+                }
             }
             if (ctx.DutyFailureObserved)
             {
@@ -199,6 +238,15 @@ internal sealed class FarmingScenario(FarmingSession session,
             if (!_exit.IsPrepared) _exit.Prepare(ctx);
             if (_exit.Update() != ExitOutcome.Completed) return;
             _restDone = true;
+        }
+        if (normalSummit && ctx.DutyFailureObserved && !session.Plan.ContinuesExistingProgress && !_retryMovementReady)
+        {
+            _retryMovementReady = _summitRetryTiming.ObserveMovementReady(CanMoveAfterExit(), Environment.TickCount64);
+            if (!_retryMovementReady)
+            {
+                ctx.StatusLine = "已退本，等待角色可移動滿 0.5 秒後重試。";
+                return;
+            }
         }
         _aborted |= ctx.AttemptAborted;
         var result = new FarmingAttemptResult(
@@ -328,7 +376,7 @@ internal sealed class FarmingScenario(FarmingSession session,
             if (!cleanup.Update(framework) || ctx.StatusIsError)
                 return false;
             _freeSaveSlot = null;
-            _entry = new(_dungeon, session.NextFloor, preferredSlot: 1);
+            _entry = new(_dungeon, session.NextFloor, preferredSlot: cleanup.SlotIndex);
             _entry.Prepare(ctx);
         }
 
@@ -394,7 +442,8 @@ internal sealed class FarmingScenario(FarmingSession session,
             {
                 _creatingSave = true;
                 _entry = new(_dungeon, session.NextFloor, preferredSlot: 0,
-                    allowReplacement: ctx.Configuration.Farming.AutoDeleteSaveWhenFull);
+                    replacementSlot: ctx.Configuration.Farming.AutoDeleteSaveWhenFull
+                        ? (ctx.Configuration.Farming.FullSaveDeletionSlot == 0 ? 0 : 1) : null);
             }
             _entry.Prepare(ctx);
         }
@@ -403,7 +452,7 @@ internal sealed class FarmingScenario(FarmingSession session,
         {
             if (session.IsPausedSlotProtected?.Invoke(candidate.Index) == true)
             {
-                ctx.StatusLine = "第 2 槽是可繼續的暫停存檔，無法自動清理。";
+                ctx.StatusLine = $"第 {candidate.Index + 1} 槽是可繼續的暫停存檔，無法自動清理。";
                 ctx.StatusIsError = true;
                 return false;
             }
@@ -461,6 +510,18 @@ internal sealed class FarmingScenario(FarmingSession session,
             _entryFloor == 91 && ResultAltarPolicy.TryGet(_dungeon.DungeonId, 100, out _) ||
             _entryFloor == 191 && Potd200RewardPolicy.IsTerminal(_dungeon.DungeonId, 200);
         ctx.EntryReadyForDuty = true;
+    }
+
+    private static unsafe bool CanMoveAfterExit()
+    {
+        var conditions = Service.Condition;
+        if (Service.LocalPlayer is not { IsDead: false, IsCasting: false } ||
+            conditions.IsOccupiedInEvent || conditions.IsCasting ||
+            conditions[ConditionFlag.InCombat] || DirectMovementController.ObservedInputAllowed == false)
+            return false;
+
+        var walk = PlayerMoveControllerWalk.Instance();
+        return walk != null && !walk->IsMovementInputLocked;
     }
 
     private void ObserveDutyCompletion(RunContext ctx)

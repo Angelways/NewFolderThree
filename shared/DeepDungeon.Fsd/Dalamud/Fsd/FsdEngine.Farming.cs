@@ -26,6 +26,7 @@ internal partial class FsdEngine
     private static readonly string[] ProgressionModeLabels = ["死靈術士（成就）", "普通登頂"];
     private static readonly string[] HoardFloorsetLabels = ["21–30 層", "31–40 層"];
     private static readonly string[] FarmingDungeonLabels = ["朝聖交錯路", "死者宮殿", "天之御柱"];
+    private static readonly string[] FullSaveDeletionSlotLabels = ["第 1 槽", "第 2 槽"];
 
     private bool IsFixedFloorsetHoard => _configuration.Farming.DungeonId == 4 &&
         _fsfScenarioIndex is 0 or 1 &&
@@ -126,9 +127,30 @@ internal partial class FsdEngine
             _configuration.Farming.AutoDeleteSaveWhenFull = autoDeleteSave;
             _configuration.Save();
         }
-        ImGui.EndDisabled();
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("新建存檔時，若兩槽皆有存檔，刪除第 2 槽後繼續。");
+            ImGui.SetTooltip("新建存檔時，若兩槽皆有存檔，清理所選槽位後繼續。");
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!autoDeleteSave);
+        int deletionSlot = _configuration.Farming.FullSaveDeletionSlot is 0 ? 0 : 1;
+        ImGui.SetNextItemWidth(100);
+        if (ImGui.Combo("##fullSaveDeletionSlot", ref deletionSlot, FullSaveDeletionSlotLabels, 2))
+        {
+            _configuration.Farming.FullSaveDeletionSlot = deletionSlot;
+            _configuration.Save();
+        }
+        ImGui.EndDisabled();
+        if (mode == FarmingMode.NormalSummit)
+        {
+            bool restart = activePlan?.RestartSummitAfterFailure ?? _configuration.Farming.RestartSummitAfterFailure;
+            if (ImGui.Checkbox("失敗後重新開始", ref restart))
+            {
+                _configuration.Farming.RestartSummitAfterFailure = restart;
+                _configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("角色持續倒下 30 秒後退本，退本後可移動滿 0.5 秒才開始重試。");
+        }
+        ImGui.EndDisabled();
         ImGui.BeginDisabled(FarmingTargetPolicy.LocksHoard(mode));
         changed = ImGui.Checkbox("探索埋藏的寶藏", ref hoard);
         ImGui.EndDisabled();
@@ -482,7 +504,8 @@ internal partial class FsdEngine
         }
         plan = plan! with { StopAfterFloor = stopAfterFloor, StartFloor = diagnosticStartFloor ?? plan.StartFloor,
             HoldOnFailure = holdOnFailure,
-            HoldAfterClear = holdAfterClear };
+            HoldAfterClear = holdAfterClear,
+            RestartSummitAfterFailure = _configuration.Farming.RestartSummitAfterFailure };
         if (_dutyState is { IsInDuty: true } duty &&
             ((!holdOnFailure && !hoardReview) || !resumeSlot.HasValue || resumeSlot is < 0 or > 1 ||
             duty.IsTransitioning || duty.DungeonId != dungeonId ||

@@ -29,6 +29,8 @@ public sealed class FarmingSettings
     }
 
     public bool AutoDeleteSaveWhenFull { get; set; }
+    public int FullSaveDeletionSlot { get; set; } = 1;
+    public bool RestartSummitAfterFailure { get; set; } = true;
     public Dictionary<string, FarmingPreferences> Preferences { get; set; } = new();
 
     public FarmingPreferences GetPreferences(FsdSettings legacy, FarmingMode? modeOverride = null)

@@ -208,7 +208,10 @@ internal partial class FsdEngine
             return "暫停紀錄目前無法讀取。";
         }
 
-        var session = new FarmingSession(checkpoint.Plan);
+        var session = new FarmingSession(checkpoint.Plan with
+        {
+            RestartSummitAfterFailure = _configuration.Farming.RestartSummitAfterFailure
+        });
         session.IsPausedSlotProtected = slot => IsPausedSlotProtected(checkpoint.Plan.DungeonId, slot);
         session.RestoreCheckpoint(checkpoint.Slot, checkpoint.Failures, checkpoint.Character,
             () => ConfirmProgressionResume(checkpoint, path),

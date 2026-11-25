@@ -21,6 +21,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime.Entry
 		private readonly DungeonData _dungeon;
 		private readonly Func<IReadOnlyList<DeepDungeon.Fsd.Core.SaveSlotSnapshot>, string?>? _validateSource;
 		private readonly int _slotIndex; // 0 for slot 1, 1 for slot 2
+		internal int SlotIndex => _slotIndex;
 
 		private readonly Dictionary<string, DateTime> _cooldowns = new Dictionary<string, DateTime>();
 		private readonly Dictionary<string, DateTime> _seenSince = new Dictionary<string, DateTime>();

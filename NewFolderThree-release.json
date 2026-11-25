@@ -5,14 +5,14 @@
     "Punchline": "可以挖寶.",
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
-    "Changelog": "補上神聖路 99 層的首領戰鬥偵測。機工士等待 30 秒仍未開戰時，會對最近可攻擊的敵人使用一次分裂彈或熱分裂彈。",
-    "AssemblyVersion": "0.7.55.31",
+    "Changelog": "三個地宮的普通登頂模式新增「失敗後重新開始」，預設開啟。角色持續倒下 30 秒後退本，返回入口並可移動滿 0.5 秒後，從該地宮的普通登頂起始層重開。另可指定存檔已滿時自動清理第 1 槽或第 2 槽。",
+    "AssemblyVersion": "0.7.55.32",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Angelways/NewFolderThree",
     "IconUrl": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/icon.png",
-    "LastUpdate": 1795604197,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.31.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.31.zip"
+    "LastUpdate": 1795640261,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.32.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.32.zip"
   }
 ]

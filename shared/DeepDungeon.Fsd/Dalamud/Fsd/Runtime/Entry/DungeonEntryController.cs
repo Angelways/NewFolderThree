@@ -19,7 +19,7 @@ internal sealed class DungeonEntryController : IDisposable
     private readonly int _requestedFloor, _preferredSlot;
     private readonly PreparedSaveBinding? _prepared;
     private readonly bool _verifyOnly;
-    private readonly bool _allowReplacement;
+    private readonly int? _replacementSlot;
     private EntranceWindowCleanup _cleanup = new();
     private EntryDispatchGate _dispatch = new();
     private RunContext? _context;
@@ -38,14 +38,14 @@ internal sealed class DungeonEntryController : IDisposable
     public SaveSlotSnapshot? ReplacementCandidate { get; private set; }
 
     public DungeonEntryController(DungeonData dungeon, int floor, int preferredSlot = 0,
-        PreparedSaveBinding? prepared = null, bool verifyOnly = false, bool allowReplacement = false)
+        PreparedSaveBinding? prepared = null, bool verifyOnly = false, int? replacementSlot = null)
     {
         _dungeon = dungeon;
         _requestedFloor = floor;
         _preferredSlot = preferredSlot;
         _prepared = prepared;
         _verifyOnly = verifyOnly;
-        _allowReplacement = allowReplacement;
+        _replacementSlot = replacementSlot;
     }
 
     public void Prepare(RunContext context)
@@ -158,7 +158,7 @@ internal sealed class DungeonEntryController : IDisposable
                 if (candidates.Length == 0)
                 {
                     const string full = "存檔列表沒有可用空槽，無法新建。";
-                    if (!_allowReplacement || SaveSlotReplacementPolicy.FindCandidate(ui.Slots) is not { } candidate)
+                    if (_replacementSlot is not { } slot || SaveSlotReplacementPolicy.FindCandidate(ui.Slots, slot) is not { } candidate)
                         return Fail(full);
                     ReplacementCandidate = candidate;
                     SetStatus("兩個存檔槽皆已使用。");

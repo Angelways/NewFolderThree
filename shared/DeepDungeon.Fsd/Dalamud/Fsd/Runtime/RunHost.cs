@@ -233,6 +233,7 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
 				}
 				if (_dutyObservationBlock == null)
 				{
+					ActiveFarming?.ResetSummitRetryTiming();
 					_floorController.SuspendForMissingDutyObservation();
 					context.Navigator.CancelAll();
 					context.CombatAssist.Suspend();
@@ -770,6 +771,11 @@ namespace DeepDungeon.Fsd.Dalamud.Runtime
 
             context.MarkDutyFailed();
             if (context.TryHoldFailedAttempt("攻略失敗"))
+            {
+                _floorController.CancelActiveMovement();
+                return;
+            }
+            if (context.FarmingPlan?.Mode == FarmingMode.NormalSummit)
             {
                 _floorController.CancelActiveMovement();
                 return;

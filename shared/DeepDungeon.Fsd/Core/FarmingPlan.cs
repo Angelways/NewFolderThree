@@ -24,6 +24,7 @@ public sealed record FarmingPlan(
     // Run-only diagnostic option: retain the duty and save for in-place inspection.
     public bool HoldOnFailure { get; init; }
     public bool HoldAfterClear { get; init; }
+    public bool RestartSummitAfterFailure { get; init; } = true;
     // In-place continuation adopts the current duty's save after the first clear.
     public bool ContinuesExistingProgress { get; init; }
     public bool IsProgression => IsProgressionMode(Mode);
@@ -163,16 +164,16 @@ public static class PreparedSavePolicy
 
 public static class SaveSlotReplacementPolicy
 {
-    public static SaveSlotSnapshot? FindCandidate(IReadOnlyList<SaveSlotSnapshot> slots)
+    public static SaveSlotSnapshot? FindCandidate(IReadOnlyList<SaveSlotSnapshot> slots, int selectedSlot = 1)
     {
-        if (slots.Count != 2 || slots[0].Index != 0 || slots[1].Index != 1 ||
-            slots[0].Empty || slots[1].Empty || string.IsNullOrEmpty(slots[1].RowFingerprint))
+        if (selectedSlot is not (0 or 1) || slots.Count != 2 || slots[0].Index != 0 || slots[1].Index != 1 ||
+            slots[0].Empty || slots[1].Empty || string.IsNullOrEmpty(slots[selectedSlot].RowFingerprint))
             return null;
-        return slots[1];
+        return slots[selectedSlot];
     }
 
     public static bool IsStillEligible(IReadOnlyList<SaveSlotSnapshot> slots, SaveSlotSnapshot expected) =>
-        FindCandidate(slots) is { } current && current.Index == expected.Index &&
+        FindCandidate(slots, expected.Index) is { } current &&
         current.StartFloor == expected.StartFloor && current.Progress == expected.Progress &&
         current.Identity == expected.Identity && current.RowFingerprint == expected.RowFingerprint;
 }
