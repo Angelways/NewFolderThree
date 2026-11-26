@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Core\DeepDungeon.Fsd.Core.csproj" />
     <InternalsVisibleTo Include="PilgrimsBossChecks" />
+    <InternalsVisibleTo Include="NewFolder3.ContractTests" />
     <Compile Include="Upstream\**\*.cs" />
     <Compile Include="Hosting\**\*.cs" />
     <Using Include="System" />

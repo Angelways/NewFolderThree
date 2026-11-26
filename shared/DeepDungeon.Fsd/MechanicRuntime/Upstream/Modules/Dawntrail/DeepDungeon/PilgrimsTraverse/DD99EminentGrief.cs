@@ -1,3 +1,5 @@
+using DeepDungeon.Fsd.Core;
+
 namespace BossMod.Endwalker.DeepDungeon.PilgrimsTraverse.DD99EminentGrief;
 
 public enum OID : uint
@@ -351,11 +353,11 @@ sealed class BoundsOfSinEnd(BossModule module) : Components.GenericAOEs(module)
             if (state == 0x00020001u)
             {
                 pillars.Add(pillarPolygons[index]);
-                Arena.Bounds = new ArenaBoundsCustom([new Rectangle(DD99EminentGrief.ArenaCenter, 20f, 15f)], [.. pillars]);
+                Arena.Bounds = DD99EminentGrief.BuildArena([.. pillars]);
             }
             else if (index == 0x00 && state == 0x00080004u)
             {
-                Arena.Bounds = new ArenaBoundsCustom([new Rectangle(DD99EminentGrief.ArenaCenter, 20f, 15f)], AdjustForHitboxOutwards: true);
+                Arena.Bounds = DD99EminentGrief.BuildArena();
                 pillars.Clear();
             }
         }
@@ -633,14 +635,19 @@ PlanLevel = 0)]
 [SkipLocalsInit]
 public sealed class DD99EminentGrief : BossModule // module also works in Final Verse normal, everything but the zone ID seem to be identical
 {
-    public DD99EminentGrief(WorldState ws, Actor primary) : base(ws, primary, ArenaCenter, new ArenaBoundsCustom([new Rectangle(ArenaCenter, 20f, 15f)], AdjustForHitboxOutwards: true))
+    public DD99EminentGrief(WorldState ws, Actor primary) : base(ws, primary, ArenaCenter, BuildArena())
     {
         ActivateComponent<LightAndDark>();
         FindComponent<LightAndDark>()!.AddAOE();
         vodorigas = Enemies((uint)OID.VodorigaMinion);
     }
 
-    public static readonly WPos ArenaCenter = new(-600f, -300f);
+    public static readonly WPos ArenaCenter = new(Pt99Platform.CenterX, Pt99Platform.CenterZ);
+
+    internal static ArenaBoundsCustom BuildArena(Shape[]? pillars = null) => new(
+        [new Rectangle(ArenaCenter, Pt99Platform.HalfWidth - Pt99Platform.PlanningInset,
+            Pt99Platform.HalfHeight - Pt99Platform.PlanningInset)], pillars);
+
     public Actor? BossEater;
     private readonly List<Actor> vodorigas;
 

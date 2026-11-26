@@ -4,7 +4,7 @@
   <PropertyGroup>
     <AssemblyName>NewFolderThree</AssemblyName>
     <RootNamespace>NewFolderThree</RootNamespace>
-    <Version>0.7.55.32</Version>
+    <Version>0.7.55.33</Version>
     <Description>Standalone Deep Dungeon FSD host.</Description>
     <IsPackable>false</IsPackable>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -23,7 +23,7 @@
     <Platforms>x64</Platforms>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Configuration.cs;DeepDungeonSpeedController.cs;FsdWindow.cs;Plugin.cs;PotdMachinistActionBlocker.cs;RsrMachinistActionControl.cs;ProductIdentity.cs;YAxisAdjustController.cs;YAxisPacketAdjustment.cs;CombatRecovery.cs;CombatRecovery.Ui.cs;CombatTimer.cs;ReconnectController.cs" />
+    <Compile Include="Configuration.cs;DeepDungeonMovementController.cs;DeepDungeonSpeedController.cs;FsdWindow.cs;Plugin.cs;PotdMachinistActionBlocker.cs;RsrMachinistActionControl.cs;ProductIdentity.cs;YAxisAdjustController.cs;YAxisPacketAdjustment.cs;CombatRecovery.cs;CombatRecovery.Ui.cs;CombatTimer.cs;ReconnectController.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="shared\DeepDungeon.Fsd\Core\DeepDungeon.Fsd.Core.csproj" />

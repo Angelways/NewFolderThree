@@ -5,14 +5,14 @@
     "Punchline": "可以挖寶.",
     "Description": "Angelways對NewFolder3的魔改版本，請支持原版：https://github.com/transparent-duck/NewFolder3。",
     "InternalName": "NewFolderThree",
-    "Changelog": "普通登頂模式增加了失敗時重啟的功能；自動清理存檔現在可以選擇刪除的槽位。",
-    "AssemblyVersion": "0.7.55.32",
+    "Changelog": "修復了神聖交錯路的部分機制處理；增加了防擊退與強制移動功能。",
+    "AssemblyVersion": "0.7.55.33",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Angelways/NewFolderThree",
     "IconUrl": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/icon.png",
-    "LastUpdate": 1795640261,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.32.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.32.zip"
+    "LastUpdate": 1795682777,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.33.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Angelways/NewFolderThree/refs/heads/main/NewFolderThree-0.7.55.33.zip"
   }
 ]

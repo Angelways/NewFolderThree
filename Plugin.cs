@@ -18,6 +18,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
     private readonly FsdApplication _application;
     private readonly YAxisAdjustController _yAxis;
     private readonly DeepDungeonSpeedController _potdSpeed;
+    private readonly DeepDungeonMovementController _movement;
     private readonly PotdMachinistActionBlocker _potdActionBlocker;
     private readonly CombatRecovery _combatRecovery;
     private readonly ReconnectController _reconnect;
@@ -49,6 +50,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         FsdApplication? application = null;
         YAxisAdjustController? yAxis = null;
         DeepDungeonSpeedController? potdSpeed = null;
+        DeepDungeonMovementController? movement = null;
         PotdMachinistActionBlocker? potdActionBlocker = null;
         CombatRecovery? combatRecovery = null;
         ReconnectController? reconnect = null;
@@ -101,6 +103,8 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
                 () => configuration.PotdSpeedAddition,
                 () => configuration.PotdMaxAcceleration);
             _potdSpeed = potdSpeed;
+            movement = new DeepDungeonMovementController(conditions, objectTable, interop, pluginLog, configuration);
+            _movement = movement;
             potdActionBlocker = new PotdMachinistActionBlocker(
                 commandManager, gameData, clientState, conditions, objectTable, interop, pluginLog);
             _potdActionBlocker = potdActionBlocker;
@@ -120,7 +124,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
                 conditions, gameGui, gameData, pluginLog);
             _reconnect = reconnect;
             _window = new FsdWindow(_application, _yAxis, _combatRecovery, _reconnect,
-                configuration, _potdSpeed);
+                configuration, _potdSpeed, _movement);
             _windows.AddWindow(_window);
 
             _commandManager.AddHandler(ProductIdentity.Command, new CommandInfo(OnCommand)
@@ -151,6 +155,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
             RollBack(() => combatRecovery?.Dispose(), rollbackErrors);
             RollBack(() => application?.Dispose(), rollbackErrors);
             RollBack(() => potdActionBlocker?.Dispose(), rollbackErrors);
+            RollBack(() => movement?.Dispose(), rollbackErrors);
             RollBack(() => potdSpeed?.Dispose(), rollbackErrors);
             RollBack(() => yAxis?.Dispose(), rollbackErrors);
             RollBack(() => { if (nativeInteropInitialized) ExpansionInterop.Uninitialize(); }, rollbackErrors);
@@ -187,6 +192,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         bool connected = _reconnect.Update();
         if (connected)
             _application.Update(framework);
+        _movement.Update(connected ? _application.CurrentDeepDungeonState : default);
         _potdActionBlocker.Update(_application.Settings.Rotation.Provider, _application.IsRunActive, connected);
         _yAxis.Update(connected ? _application.CurrentDeepDungeonState : default);
         _combatRecovery.Update(_application.IsRunActive, _application.CanRecoverCombat,
@@ -216,6 +222,7 @@ public sealed class Plugin : IDalamudPlugin, IDisposable
         _combatRecovery.Dispose();
         _potdActionBlocker.Dispose();
         _application.Dispose();
+        _movement.Dispose();
         _potdSpeed.Dispose();
         _yAxis.Dispose();
         ExpansionInterop.Uninitialize();

@@ -12,10 +12,11 @@ internal sealed class FsdWindow : Window
     private readonly ReconnectController _reconnect;
     private readonly Configuration _configuration;
     private readonly DeepDungeonSpeedController _potdSpeed;
+    private readonly DeepDungeonMovementController _movement;
 
     public FsdWindow(FsdApplication application, YAxisAdjustController yAxis,
         CombatRecovery combatRecovery, ReconnectController reconnect,
-        Configuration configuration, DeepDungeonSpeedController potdSpeed)
+        Configuration configuration, DeepDungeonSpeedController potdSpeed, DeepDungeonMovementController movement)
         : base($"你是壞孩子###{ProductIdentity.InternalName}")
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
@@ -24,6 +25,7 @@ internal sealed class FsdWindow : Window
         _reconnect = reconnect;
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _potdSpeed = potdSpeed ?? throw new ArgumentNullException(nameof(potdSpeed));
+        _movement = movement;
     }
 
     public override void Draw()
@@ -110,6 +112,22 @@ internal sealed class FsdWindow : Window
         {
             ImGui.Separator();
             ImGui.TextWrapped(status);
+        }
+
+        ImGui.Separator();
+        bool preventKnockback = _configuration.PtKnockbackPreventionEnabled;
+        bool forceMove = _configuration.DeepDungeonForceMoveEnabled;
+        bool movementChanged = ImGui.Checkbox("防擊退（妖宮 71–99 層）", ref preventKnockback);
+        if (!_movement.KnockbackAvailable)
+            ImGui.TextUnformatted("防擊退目前無法使用。");
+        movementChanged |= ImGui.Checkbox("強制移動（所有深宮模式）", ref forceMove);
+        if (!_movement.ForceMoveAvailable)
+            ImGui.TextUnformatted("強制移動目前無法使用。");
+        if (movementChanged)
+        {
+            _configuration.PtKnockbackPreventionEnabled = preventKnockback;
+            _configuration.DeepDungeonForceMoveEnabled = forceMove;
+            _configuration.SavePluginConfig();
         }
     }
 

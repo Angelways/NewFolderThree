@@ -4,6 +4,7 @@ using DeepDungeon.Fsd.Core;
 using DeepDungeon.Fsd.Dalamud;
 using DeepDungeon.Fsd.Dalamud.GameState;
 using DeepDungeon.Fsd.Runtime;
+using Pt99Boss = BossMod.Endwalker.DeepDungeon.PilgrimsTraverse.DD99EminentGrief.DD99EminentGrief;
 
 namespace NewFolderThree;
 
@@ -21,6 +22,8 @@ internal static class Program
         passed += Run("normal-summit-retry-timing", TestSummitRetryTiming);
         passed += Run("current-duty-continuation-floor-routing", TestCurrentDutyContinuationFloorRouting);
         passed += Run("potd-speed-floor-gate", TestPotdSpeedFloorGate);
+        passed += Run("pt99-platform-edge", TestPt99PlatformEdge);
+        passed += Run("deep-dungeon-movement-scope", TestDeepDungeonMovementScope);
         passed += Run("potd-machinist-action-block", TestPotdMachinistActionBlock);
         passed += Run("rsr-machinist-action-control", TestRsrMachinistActionControl);
         passed += Run("boss-pull-on-idle-boss-floor", TestBossPullTimer);
@@ -47,6 +50,59 @@ internal static class Program
             "The manifest and the plugin must have the same display name.");
         Assert(root.GetProperty("Author").GetString() == "John Smith",
             "The local manifest must retain the upstream author.");
+    }
+
+    private static void TestPt99PlatformEdge()
+    {
+        Vector2 approach = new(-619.25323f, -286.24844f);
+        Vector2 oldWaypoint = new(-620.5f, -285f);
+        var arena = Pt99Boss.BuildArena();
+        var center = Pt99Boss.ArenaCenter;
+        Assert(!arena.Contains(new BossMod.WPos(oldWaypoint.X, oldWaypoint.Y) - center),
+            "The live encounter must exclude the ARR waypoint from its planning rectangle.");
+        var pillar = new BossMod.WPos(-600, -307);
+        var withPillar = Pt99Boss.BuildArena([new BossMod.Polygon(pillar, 2.57f, 64)]);
+        Assert(!withPillar.Contains(new BossMod.WPos(oldWaypoint.X, oldWaypoint.Y) - center)
+            && !withPillar.Contains(pillar - center) && arena.Contains(pillar - center),
+            "The inset must remain active while the encounter adds and removes pillar obstacles.");
+        Assert(!Pt99Platform.AllowsWalk(approach, oldWaypoint, 9),
+            "The ARR waypoint must be rejected before issuing the walk input.");
+        Assert(!Pt99Platform.AllowsWalk(new(-619.4f, -290), new(-619.7f, -290), 9),
+            "Full-speed movement must stop before a legal waypoint can carry the player over the edge.");
+        Assert(!Pt99Platform.AllowsWalk(new(-618, -290), new(-619, -290), 9, .25f),
+            "A slow frame must increase the projected step.");
+        Assert(Pt99Platform.AllowsWalk(new(-619.9f, -290), new(-618f, -290), 9),
+            "The guard must permit recovery back into the platform from the outer margin.");
+        Assert(Pt99Platform.AllowsWalk(new(-615, -289), new(-619, -286), 9),
+            "A waypoint inside the planning rectangle must remain available.");
+    }
+
+    private static void TestDeepDungeonMovementScope()
+    {
+        var state = new DeepDungeonStateSnapshot(true, true, true, 4, 99,
+            DeepDungeonFloorKind.Boss, false, 0);
+        foreach (uint dungeon in new uint[] { 1, 2, 3, 4 })
+        {
+            foreach (byte floor in new byte[] { 1, 70, 71, 80, 90, 99, 100 })
+            {
+                var duty = state with { DungeonId = dungeon, Floor = floor };
+                Assert(DeepDungeonMovementPolicy.IsPlayable(duty),
+                    $"Force move must be available in dungeon {dungeon} floor {floor}.");
+                Assert(DeepDungeonMovementPolicy.CanPreventKnockback(duty) ==
+                    (dungeon == 4 && floor is >= 71 and <= 99),
+                    $"Unexpected knockback prevention scope in dungeon {dungeon} floor {floor}.");
+            }
+        }
+        foreach (var duty in new[] { default, state with { IsInDuty = false },
+            state with { IsTransitioning = true }, state with { Floor = 0 }, state with { IsValid = false } })
+        {
+            Assert(!DeepDungeonMovementPolicy.IsPlayable(duty) && !DeepDungeonMovementPolicy.CanPreventKnockback(duty),
+                "Invalid and transitioning duties must leave both features inactive.");
+        }
+        foreach (uint permission in new uint[] { 96, 97, 98, 99, 1001, 1006, 1007, 1008 })
+            Assert(DeepDungeonMovementPolicy.IsWalkingPermission(permission), $"Missing movement permission {permission}.");
+        foreach (uint permission in new uint[] { 0, 95, 100, 1000, 1002, 1005, 1009 })
+            Assert(!DeepDungeonMovementPolicy.IsWalkingPermission(permission), $"Unexpected movement permission {permission}.");
     }
 
     private static void TestFullSaveReplacement()

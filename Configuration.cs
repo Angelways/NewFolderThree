@@ -18,6 +18,8 @@ public sealed class Configuration : IPluginConfiguration, IFsdSettingsStore
     public bool PotdSpeedEnabled { get; set; }
     public float PotdSpeedAddition { get; set; } = 0.5f;
     public bool PotdMaxAcceleration { get; set; }
+    public bool PtKnockbackPreventionEnabled { get; set; } = true;
+    public bool DeepDungeonForceMoveEnabled { get; set; } = true;
 
     public void Initialize(IDalamudPluginInterface pluginInterface)
         => _pluginInterface = pluginInterface ?? throw new ArgumentNullException(nameof(pluginInterface));

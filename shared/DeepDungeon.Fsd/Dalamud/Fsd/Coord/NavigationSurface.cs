@@ -1,7 +1,9 @@
 using System.Numerics;
+using DeepDungeon.Fsd.Core;
 using DeepDungeon.Fsd.Dalamud.Runtime.Navigation;
 using DeepDungeon.Fsd.Dalamud.Utilities;
 using MasterPlayer.MechanicRuntime;
+using Pt99Actor = BossMod.Endwalker.DeepDungeon.PilgrimsTraverse.DD99EminentGrief.OID;
 
 namespace DeepDungeon.Fsd.Dalamud.Coord;
 
@@ -49,6 +51,7 @@ internal sealed partial class NavigationSurface : INavSurface, IDisposable
         _movementSpeed = movementSpeed ?? (() => DirectMovementController.TryReadNativeMotion(out var m)
             ? m.TargetSpeed > 0 ? m.TargetSpeed : m.BaseSpeed > 0 ? m.BaseSpeed : 6 : 6);
         _direct.ClampFinalStep = false;
+        _direct.CanWriteWalkInput = CanWriteWalkInput;
         _direct.AfterWalkInput = OnNativeWrite;
     }
     internal bool NeedsSafetyPlan => MechanicExecutionState.MovementBlocked
@@ -265,6 +268,17 @@ internal sealed partial class NavigationSurface : INavSurface, IDisposable
         if (_route == null)
         { ReleaseDirect(); Diag(now, _failure ?? "planning"); return NavigationState.StuckRepathing; }
         var command = _follower.Step(_observed);
+        if (HasPt99PlatformEdge &&
+            (command.Correction is { } correction && !Pt99Platform.Contains(correction, Pt99Platform.PlanningInset)
+                || command.Kind == NavigationCommandKind.Move && !Pt99Platform.AllowsWalk(
+                    command.Correction ?? _observed.Position, command.Target, Math.Max(speed, _observed.Velocity.Length()))))
+        {
+            InvalidatePlanning(now);
+            DropRoute();
+            ReleaseDirect();
+            Diag(now, "pt99-platform-edge");
+            return NavigationState.StuckRepathing;
+        }
         _routeIndex = _follower.Index;
         _commandedTarget = new(command.Target.X, playerPos.Y, command.Target.Y);
         try
@@ -312,6 +326,24 @@ internal sealed partial class NavigationSurface : INavSurface, IDisposable
         _follower.Reset();
         _routeIndex = 0;
         _displayPath.Clear();
+    }
+
+    private bool HasPt99PlatformEdge => _snapshot is
+        { BossDead: false, Territory: Pt99Platform.TerritoryId, BossOID: (uint)Pt99Actor.EminentGrief };
+
+    private unsafe bool CanWriteWalkInput()
+    {
+        if (!HasPt99PlatformEdge) return true;
+        if (Service.LocalPlayer is not { } player || Service.ClientState.TerritoryType != Pt99Platform.TerritoryId)
+            return false;
+        var speed = DirectMovementController.TryReadNativeMotion(out var motion)
+            ? Math.Max(motion.Speed, motion.TargetSpeed > 0 ? motion.TargetSpeed : motion.BaseSpeed)
+            : _movementSpeed();
+        var framework = FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance();
+        var frameSeconds = framework != null ? framework->FrameDeltaTime : 0f;
+        var target = _direct.DesiredPosition;
+        return Pt99Platform.AllowsWalk(new(player.Position.X, player.Position.Z),
+            new(target.X, target.Z), speed, frameSeconds);
     }
 
     private void ReleaseDirect() { if (_direct.Enabled) _direct.Release(); }
